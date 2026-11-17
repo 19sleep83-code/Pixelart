@@ -48,6 +48,9 @@ var auto_draw := true
 var paused := false
 ## time the last redraw took (ms)
 var draw_ms := 0.0
+## set to a Dictionary to gather the time (µs) of each part of redraw()
+var profile: Variant = null
+var _lap_t := 0
 
 var _shake := 0.0
 var _layers: Array[RID] = []
@@ -73,6 +76,9 @@ var _iref: Array = []
 var _ifr := PackedInt32Array()
 var _ipos := PackedVector2Array()
 var _air: Array[Ent] = []
+# the effects in view
+var _fv: Array[Game.Fx] = []
+var _fq := PackedVector2Array()
 # lights
 var _lx := PackedFloat32Array()
 var _lc := PackedColorArray()
@@ -478,9 +484,12 @@ func redraw(dt := 1.0 / 60.0) -> void:
 	var ty0 := maxi(0, floori(minf(px_to_tile(Vector2(X1, Y0)).y, px_to_tile(Vector2(X0, Y0)).y)))
 	var ty1 := mini(N - 1, ceili(px_to_tile(Vector2(X0, Y1)).y))
 	atmos.water(g.time)
+	_lap("")
 
 	_draw_shadows()
+	_lap("_draw_shadows")
 	_draw_objects(X0, X1, Y0, Y1, ty0, ty1)
+	_lap("_draw_objects")
 
 	# cloud shadows drift over everything on the ground
 	var cl := _layers[L_CLOUD]
@@ -494,19 +503,37 @@ func redraw(dt := 1.0 / 60.0) -> void:
 			continue
 		_footprint(cl, e.tx, e.ty, e.w, e.h, C_SEL if e.owner == 0 else C_FOE, 0.9 if e.selected else 0.5)
 
+	_gather_fx()
 	_draw_fx_low()
+	_lap("_draw_fx_low")
 	var gr: Variant = atmos.grade()
 	if gr != null:
 		_rect(_layers[L_GRADE], _view.position.x - 8, _view.position.y - 8, _view.size.x + 16, _view.size.y + 16, gr)
 	_draw_lights(X0, X1, Y0, Y1, ty0, ty1)
+	_lap("_draw_lights")
 	_draw_shots()
+	_lap("_draw_shots")
 	_draw_fx_high()
+	_lap("_draw_fx_high")
 	atmos.rain(_layers[L_RAIN], _view, dt)
 	_draw_bars()
+	_lap("_draw_bars")
 	_draw_garrisons()
+	_lap("_draw_garrisons")
 	_draw_fog()
+	_lap("_draw_fog")
 	_draw_overlay()
+	_lap("_draw_overlay")
 	draw_ms = (Time.get_ticks_usec() - t0) / 1000.0
+
+
+func _lap(name: String) -> void:
+	if profile == null:
+		return
+	var t := Time.get_ticks_usec()
+	if name != "":
+		profile[name] = profile.get(name, 0) + t - _lap_t
+	_lap_t = t
 
 
 func _tile_span(ty: int, X0: float, X1: float, Y0: float, Y1: float) -> Vector2i:
@@ -762,19 +789,48 @@ static func _tip(cx: float, cy: float, r: float, ang: float) -> Vector2:
 	return Vector2(Rng.js_round(cx + bx - by), Rng.js_round(cy + (bx + by) / 2.0))
 
 
+## the effects that can be seen, once per frame: in view (with a margin) and where the player sees;
+## an explosion shakes the view and lights it up even out of view, as in the prototype
+func _gather_fx() -> void:
+	var g := game
+	var N := g.map.N
+	var fog := g.fog
+	_fv.clear()
+	_fq.clear()
+	var vr := _view.grow(300)
+	var ad := _layers[L_HIGH_ADD]
+	for f in g.fx:
+		if f.t < 0:
+			continue
+		var tx := floori(f.x)
+		var ty := floori(f.y)
+		if tx < 0 or ty < 0 or tx >= N or ty >= N or fog[ty * N + tx] != 2:
+			continue
+		if f.ki == 0:
+			var size := int(f.size)
+			if not f.shook and size >= 1:
+				f.shook = true
+				add_shake([0.4, 1.4, 2.8, 4.5][mini(3, size)])
+			if f.t < 0.05 and size >= 2:
+				# the whole view lights up for a moment
+				_rect(ad, _view.position.x - 8, _view.position.y - 8, _view.size.x + 16, _view.size.y + 16, Color(1, 220 / 255.0, 170 / 255.0, 0.09 * size * (1 - f.t / 0.05)))
+		var q := Vector2(floorf((f.x - f.y) * 32.0 + 0.5), floorf((f.x + f.y) * 16.0 - f.z * KZ + 0.5))
+		if not vr.has_point(q):
+			continue
+		_fv.append(f)
+		_fq.append(q)
+
+
 ## smoke, dust and water: lit like the ground around them
 func _draw_fx_low() -> void:
-	var g := game
 	var ci := _layers[L_LOW]
-	for f in g.fx:
-		if f.t < 0 or not _visible_pt(f.x, f.y):
+	for j in _fv.size():
+		var f: Game.Fx = _fv[j]
+		var ki := f.ki
+		if ki != 1 and ki != 5 and ki != 6 and ki != 10 and ki != 7 and ki != 8:
 			continue
 		var kind := f.kind
-		if kind != "smoke" and kind != "dust" and kind != "debris" and kind != "clod" and kind != "wake" and kind != "splash":
-			continue
-		var q := _scr(f.x, f.y, f.z)
-		if not _view.grow(200).has_point(q):
-			continue
+		var q := _fq[j]
 		var k := f.t / f.life
 		match kind:
 			"smoke", "dust":
@@ -881,10 +937,9 @@ func _draw_lights(X0: float, X1: float, Y0: float, Y1: float, ty0: int, ty1: int
 					continue
 				for q in lamps:
 					_light(q.x, q.y, 8 * P, Color(1, 200 / 255.0, 120 / 255.0, 0.85), level * 0.8)
-	for f in g.fx:
-		if f.t < 0 or not _visible_pt(f.x, f.y):
-			continue
-		var q := _scr(f.x, f.y, f.z)
+	for j in _fv.size():
+		var f: Game.Fx = _fv[j]
+		var q := _fq[j]
 		var k := f.t / f.life
 		match f.kind:
 			"exp":
@@ -946,35 +1001,25 @@ func _draw_shots() -> void:
 
 ## smoke, fire and explosions
 func _draw_fx_high() -> void:
-	var g := game
 	var ci := _layers[L_HIGH]
 	var ad := _layers[L_HIGH_ADD]
-	var vr := _view.grow(260)
-	for f in g.fx:
-		if f.t < 0 or not _visible_pt(f.x, f.y):
+	for j in _fv.size():
+		var f: Game.Fx = _fv[j]
+		var ki := f.ki
+		if ki == 1 or ki == 5 or ki == 6 or ki == 10 or ki == 7 or ki == 8:
 			continue
-		var q := _scr(f.x, f.y, f.z)
+		var q := _fq[j]
 		var k := f.t / f.life
 		match f.kind:
 			"exp":
-				var size := int(f.size)
-				if not f.shook and size >= 1:
-					f.shook = true
-					add_shake([0.4, 1.4, 2.8, 4.5][mini(3, size)])
-				if f.t < 0.05 and size >= 2:
-					# the whole view lights up for a moment
-					_rect(ad, _view.position.x - 8, _view.position.y - 8, _view.size.x + 16, _view.size.y + 16, Color(1, 220 / 255.0, 170 / 255.0, 0.09 * size * (1 - f.t / 0.05)))
-				if not vr.has_point(q):
-					continue
-				var fr: Sheet = Art.explosion[mini(3, size)]
+				var fr: Sheet = Art.explosion[mini(3, int(f.size))]
 				var i := mini(fr.n - 1, floori(k * fr.n))
 				if f.scale != 1.0:
 					fr.draw_scaled(ci, i, q.x, q.y, f.scale)
 				else:
 					fr.draw(ci, i, q.x, q.y)
 			"fire":
-				if vr.has_point(q):
-					Art.fire.draw(ci, int(floorf(f.t * 14 + f.x * 7)) % Art.fire.n, q.x, q.y)
+				Art.fire.draw(ci, int(floorf(f.t * 14 + f.x * 7)) % Art.fire.n, q.x, q.y)
 			"flash":
 				if f.size > 3:
 					var r := Rng.js_round(f.size * 3 * P * (1 - k * 0.5))

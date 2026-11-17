@@ -239,30 +239,30 @@ func scene_sea() -> void:
 	game.command_move(pick.call(fleets[1], ["boat", "corvette"]), a.x, a.y, true)
 	game.command_move(pick.call(fleets[0], ["destroyer"]), a.x + u.x * 5, a.y + u.y * 5, false)
 	game.command_move(pick.call(fleets[1], ["destroyer"]), b.x - u.x * 5, b.y - u.y * 5, false)
-	# fight until a ship has gone down and missiles are in the air
-	var sunk_t := -1.0
-	for i in 30 * 120:
-		game.update(STEP)
-		var missiles := 0
-		for s in game.shots:
-			if s.kind == "missile":
-				missiles += 1
-		var sinking := false
-		for w in game.wrecks:
-			if w.naval and w.t > 1.2 and w.t < 4:
-				sinking = true
-		if sinking and missiles >= 1:
-			break
-	var ships := []
-	for e in game.ents:
-		if e.naval and not e.dead:
-			ships.append(e)
+	# fight until a ship is going down
 	var focus := Vector2(cx, cy)
-	for w in game.wrecks:
-		if w.naval:
-			focus = Vector2(w.x, w.y)
-	world.set_zoom_level(1)
-	world.look_at_tile(focus.x, focus.y)
+	for i in 30 * 150:
+		game.update(STEP)
+		var found := false
+		for w in game.wrecks:
+			if w.naval and w.t > 1.6:
+				focus = Vector2(w.x, w.y)
+				found = true
+		if found:
+			break
+	# and until missiles are in the air
+	var missiles := 0
+	for i in 30 * 4:
+		missiles = 0
+		for s in game.shots:
+			if s.kind == "missile" and s.t > 0.3:
+				missiles += 1
+		if missiles >= 1:
+			break
+		game.update(STEP)
+	print("sea: t=%.1f wrecks=%d missiles=%d fx=%d" % [game.time, game.wrecks.size(), missiles, game.fx.size()])
+	world.set_zoom_level(2)
+	world.look_at_tile(focus.x, focus.y - 1)
 	await _shot("d_sea")
 
 
@@ -358,7 +358,10 @@ func scene_rain() -> void:
 	_reveal()
 	_clear_units()
 	var hq := _hq(0)
-	var c := Vector2(hq.x + 6, hq.y + 6)
+	var foe := _hq(1)
+	var c := Vector2(hq.x * 0.6 + foe.x * 0.4, hq.y * 0.6 + foe.y * 0.4)
+	var cw := game.pf.nearest_walkable(c.x, c.y)
+	c = Vector2(cw.x, cw.y)
 	var mine: Array[Ent] = []
 	var theirs: Array[Ent] = []
 	for k in 6:
