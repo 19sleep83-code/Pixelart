@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixelfront</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app" class="hidden">
+      <div id="view-wrap">
+        <canvas id="view"></canvas>
+        <div id="vignette"></div>
+        <div id="topbar">
+          <button id="menu-btn" title="Pause und Menü (P)">❚❚ Menü</button>
+          <span id="clock">0:00</span>
+        </div>
+        <div id="msgs"></div>
+      </div>
+      <aside id="side">
+        <div id="res">
+          <div class="money"><span class="lbl">Rohstoffe</span><span id="credits">0</span></div>
+          <div class="power">
+            <span class="lbl">Strom</span>
+            <div id="powerbar"><div id="powerfill"></div><div id="poweruse"></div></div>
+            <span id="powertext">0/0</span>
+          </div>
+        </div>
+        <canvas id="mini" width="256" height="128"></canvas>
+        <div id="tabs">
+          <button data-tab="build">Bau</button>
+          <button data-tab="inf">Infanterie</button>
+          <button data-tab="veh">Fahrzeuge</button>
+          <button data-tab="air">Luft</button>
+        </div>
+        <div id="grid"></div>
+        <div id="tip"></div>
+        <div id="sel"></div>
+      </aside>
+    </div>
+
+    <div id="screen">
+      <div id="menu" class="panel">
+        <h1>PIXELFRONT</h1>
+        <p class="sub">Echtzeit-Strategie in Mitteleuropa</p>
+        <div class="row">
+          <span class="lbl">Seite</span>
+          <div class="seg" id="opt-faction">
+            <button data-v="nato" class="on"><i class="chip nato"></i>NATO</button>
+            <button data-v="ru"><i class="chip ru"></i>Russland</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lbl">Gegner</span>
+          <div class="seg" id="opt-diff">
+            <button data-v="0">Leicht</button>
+            <button data-v="1" class="on">Normal</button>
+            <button data-v="2">Schwer</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lbl">Karte</span>
+          <input id="opt-seed" type="number" min="1" max="99999" />
+          <button id="opt-rand" class="small">Zufall</button>
+        </div>
+        <button id="start" class="big">Gefecht starten</button>
+        <details>
+          <summary>Steuerung und Spielablauf</summary>
+          <ul class="help">
+            <li><b>Linksklick / Rahmen ziehen</b> – Einheiten auswählen (Umschalt: hinzufügen, Doppelklick: alle gleichen im Bild)</li>
+            <li><b>Rechtsklick</b> – bewegen, angreifen, Erz abbauen (mit Erzlaster), Sammelpunkt setzen (mit Gebäude)</li>
+            <li><b>A</b> + Linksklick – Angriffsbewegung · <b>S</b> – Stopp</li>
+            <li><b>Strg + 1–9</b> – Gruppe bilden · <b>1–9</b> – Gruppe wählen (zweimal: hinspringen)</li>
+            <li><b>Q</b> – ganze Armee · <b>E</b> – Kampfeinheiten im Bild · <b>Leertaste</b> – zur Auswahl · <b>H</b> – zum Hauptquartier</li>
+            <li><b>Pfeiltasten / Bildschirmrand / mittlere Maustaste</b> – Ansicht verschieben · <b>Mausrad</b> – Zoom</li>
+            <li><b>P</b> – Pause</li>
+          </ul>
+          <p class="note">Baue ein Kraftwerk und ein Rohstoffdepot. Erzlaster bringen Erz ins Depot, das wird zu Rohstoffen. Gebäude werden im Reiter „Bau“ gebaut und danach mit einem Klick platziert. Zerstöre alle Gebäude des Gegners.</p>
+        </details>
+      </div>
+
+      <div id="loading" class="panel hidden">
+        <h2>Lade Gefecht …</h2>
+        <div class="bar"><div id="load-fill"></div></div>
+        <p id="load-what"></p>
+      </div>
+
+      <div id="pause" class="panel hidden">
+        <h2>Pause</h2>
+        <button id="resume" class="big">Weiter</button>
+        <button id="restart">Neues Gefecht, gleiche Einstellungen</button>
+        <button id="quit">Zum Hauptmenü</button>
+      </div>
+
+      <div id="end" class="panel hidden">
+        <h2 id="end-title">Sieg</h2>
+        <div id="end-stats"></div>
+        <button id="again" class="big">Nochmal</button>
+        <button id="end-menu">Zum Hauptmenü</button>
+      </div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
