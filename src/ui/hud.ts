@@ -181,7 +181,7 @@ export class Hud {
     }
     const need = missing.length ? `<div class="need">Benötigt: ${missing.map((k) => esc(this.g.bdefs[k]?.name ?? k)).join(', ')}</div>` : ''
     t.innerHTML =
-      `<div class="card-head"><span class="stencil">${esc(def.name)}</span></div>` +
+      `<div class="card-head"><span class="stencil">${esc(def.name)}</span>${building ? '' : `<span class="role">${esc((def as UnitDef).role)}</span>`}</div>` +
       `<p>${esc(def.desc)}</p><dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${need}`
     t.style.display = 'block'
     if (at) {
@@ -301,7 +301,7 @@ export class Hud {
         const f = g.players[e.owner].faction
         const icon = e.isB ? this.A.buildings[f][e.key].icon : this.A.units[f][e.key].icon
         const name = e.isB ? e.b!.name : e.u!.name
-        const sub = e.isB ? (e.owner === 0 ? 'Gebäude' : 'feindliches Gebäude') : `${ARMOR_NAME[e.u!.armor]}${e.owner !== 0 ? ' · Feind' : ''}`
+        const sub = e.isB ? (e.owner === 0 ? 'Gebäude' : 'feindliches Gebäude') : `${e.u!.role} · ${ARMOR_NAME[e.u!.armor]}${e.owner !== 0 ? ' · Feind' : ''}`
         el.innerHTML =
           `<div class="stencil sel-title">Auswahl</div>` +
           `<div class="one"><div class="portrait"><img src="${icon.toDataURL()}" alt=""></div><div class="info">` +

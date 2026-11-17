@@ -454,6 +454,13 @@ kbd {
   padding-bottom: 4px;
   margin-bottom: 4px;
 }
+#tip .role {
+  display: block;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 1px;
+}
 #tip p {
   margin: 0 0 6px;
   color: var(--text);

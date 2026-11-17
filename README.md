@@ -68,9 +68,31 @@ Hinter dem Menü läuft eine echte Schlacht zwischen zwei Computergegnern. Einst
 | Reiter | Einheiten |
 | --- | --- |
 | Infanterie | Schütze, Panzerabwehr, Scharfschütze (unsichtbar, solange er stillhält) |
-| Fahrzeuge | Erzlaster, Spähwagen, Schützenpanzer, Kampfpanzer, Flakpanzer, Panzerhaubitze (NATO) bzw. Raketenwerfer (Russland) |
+| Fahrzeuge | Erzlaster, Spähwagen, Schützenpanzer, Kampfpanzer, Flakpanzer, Rohrartillerie, Raketenartillerie |
 | Luft | Kampfhubschrauber, Kampfjet (Luftschlag, danach zurück zum Aufmunitionieren) |
-| See | Patrouillenboot, Korvette, Zerstörer (NATO) bzw. Raketenkreuzer (Russland), Landungsschiff (5 Plätze), Flugzeugträger (3 eigene Jets) |
+| See | Patrouillenboot, Korvette, Zerstörer bzw. Raketenkreuzer, Landungsschiff (5 Plätze), Flugzeugträger (3 eigene Jets) |
+
+Die Fahrzeuge tragen die Namen realer Vorbilder:
+
+| Rolle | NATO | Russland |
+| --- | --- | --- |
+| Infanterie | Grenadier (G36) | Schütze (AK-74) |
+| Panzerabwehr | Panzerfaust 3 | RPG-7 |
+| Scharfschütze | G22 | SWD |
+| Erzlaster | MAN | KAMAZ |
+| Spähwagen | Fennek | BRDM-2 |
+| Schützenpanzer | Marder 1A5 | BMP-2 |
+| Kampfpanzer | Leopard 2A6 | T-90A |
+| Flakpanzer | Gepard 1A2 | 2K22 Tunguska |
+| Rohrartillerie | Panzerhaubitze 2000 | 2S19 Msta-S |
+| Raketenartillerie | MARS II | BM-21 Grad |
+| Kampfhubschrauber | AH-64 Apache | Mi-24 Hind |
+| Kampfjet | Eurofighter | Su-34 |
+| Patrouillenboot | Schnellboot S143 | Raptor |
+| Korvette | K130 | Steregushchiy |
+| Zerstörer / Kreuzer | Arleigh Burke | Slava-Kreuzer |
+| Landungsschiff | LCU 1700 | Ondatra |
+| Flugzeugträger | Nimitz | Admiral Kusnezow |
 
 Die beiden Seiten unterscheiden sich in Aussehen und Werten: NATO hat mehr Reichweite und
 Präzision, Russland mehr Panzerung und niedrigere Preise. Fährt die Maus über ein Feld im Baumenü, erscheint die

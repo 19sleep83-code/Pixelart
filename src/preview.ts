@@ -15,7 +15,7 @@ ctx.fillStyle = '#3c6c86'
 ctx.fillRect(0, 230, cv.width, 150)
 let x = 30, y = 40
 const put = (sp: { cv: HTMLCanvasElement; ax: number; ay: number }) => ctx.drawImage(sp.cv, x - sp.ax, y - sp.ay)
-const land = ['rifle', 'at', 'sniper', 'harv', 'scout', 'ifv', 'mbt', 'aa', 'art', 'heli', 'jet']
+const land = ['art', 'mlrs', 'mbt', 'ifv', 'scout', 'aa', 'harv', 'heli', 'jet']
 const sea = ['boat', 'corvette', 'destroyer', 'lander', 'carrier']
 for (const f of ['nato', 'ru'] as Faction[]) {
   x = 30

@@ -82,7 +82,7 @@ export class Renderer {
   }
 
   addShake(k: number) {
-    this.shake = Math.min(4, this.shake + k)
+    this.shake = Math.min(7, this.shake + k)
   }
 
   /** what stands under a screen pixel (topmost first) */
@@ -340,16 +340,34 @@ export class Renderer {
         case 'smoke':
         case 'dust': {
           const r = Math.min(8, Math.round(f.size + k * 3) - 1)
-          const sp = (f.kind === 'dust' ? A.dust : A.smoke)[Math.max(0, r)]
-          ctx.globalAlpha = (1 - k) * (f.kind === 'dust' ? 0.5 : 0.7)
-          this.drawSprite(sp, q.x, q.y)
+          // the heavy smoke of a blast is dark, big and grows as it rises
+          const heavy = f.kind === 'smoke' && f.size >= 4
+          const sp = (f.kind === 'dust' ? A.dust : heavy ? A.soot : A.smoke)[Math.max(0, r)]
+          ctx.globalAlpha = (1 - k) * (f.kind === 'dust' ? 0.5 : heavy ? 0.85 : 0.7)
+          if (heavy) {
+            const sc = 1.3 + k * 1.4
+            ctx.drawImage(sp.cv, Math.round(q.x - sp.ax * sc), Math.round(q.y - sp.ay * sc), Math.round(sp.w * sc), Math.round(sp.h * sc))
+          } else this.drawSprite(sp, q.x, q.y)
           ctx.globalAlpha = 1
           break
         }
         case 'debris':
-          ctx.fillStyle = k < 0.3 ? '#ffb050' : '#2a2622'
-          ctx.fillRect(q.x, q.y, 2, 1)
+          ctx.fillStyle = k < 0.25 ? '#ffb050' : '#2a2622'
+          ctx.fillRect(q.x, q.y, f.size >= 3 ? 4 : 2, f.size >= 3 ? 3 : 1)
           break
+        case 'clod': {
+          // earth thrown up by a blast
+          ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1
+          const h = hash2(Math.round(f.vx * 1000), Math.round(f.life * 1000), 3)
+          ctx.fillStyle = h < 0.35 ? '#4a3a28' : h < 0.7 ? '#6a5438' : '#2e261e'
+          ctx.fillRect(q.x, q.y, f.size, f.size - 1 || 1)
+          if (f.size >= 3) {
+            ctx.fillStyle = '#8a7252'
+            ctx.fillRect(q.x, q.y, 1, 1)
+          }
+          ctx.globalAlpha = 1
+          break
+        }
         case 'wake': {
           // foam spreading behind a boat
           const r = Math.round(f.size * (0.6 + k * 1.4))
@@ -389,7 +407,8 @@ export class Renderer {
       if (f.t < 0 || !this.visiblePt(f.x, f.y)) continue
       const q = scr(f.x, f.y, f.z)
       const k = f.t / f.life
-      if (f.kind === 'exp') lights.push({ x: q.x, y: q.y - 4, r: 18 + f.size * 12, color: 'rgba(255,170,80,0.9)', a: (1 - k) * (0.45 + level * 0.5) })
+      if (f.kind === 'exp') lights.push({ x: q.x, y: q.y - 4, r: 20 + f.size * 16, color: 'rgba(255,170,80,0.95)', a: (1 - k) * (0.55 + level * 0.5) })
+      else if (f.kind === 'ember') lights.push({ x: q.x, y: q.y, r: 3, color: 'rgba(255,170,60,1)', a: (1 - k) * (0.5 + level * 0.5) })
       else if (f.kind === 'fire') lights.push({ x: q.x, y: q.y - 3, r: 12, color: 'rgba(255,140,50,0.8)', a: 0.25 + level * 0.6 })
       else if (f.kind === 'flash') lights.push({ x: q.x, y: q.y, r: 6 + f.size * 3, color: 'rgba(255,230,160,0.9)', a: 0.4 + level * 0.6 })
     }
@@ -454,10 +473,24 @@ export class Renderer {
       const k = f.t / f.life
       switch (f.kind) {
         case 'exp': {
-          const frames = A.explosions[Math.min(2, f.size)]
+          const frames = A.explosions[Math.min(3, f.size)]
           const fr = frames[Math.min(frames.length - 1, Math.floor(k * frames.length))]
-          this.drawSprite(fr, q.x, q.y - fr.h / 3)
-          if (f.t < 0.05 && f.size >= 1) this.addShake(f.size * 0.8)
+          const sc = f.scale ?? 1
+          if (sc !== 1) ctx.drawImage(fr.cv, Math.round(q.x - fr.ax * sc), Math.round(q.y - fr.ay * sc), Math.round(fr.w * sc), Math.round(fr.h * sc))
+          else this.drawSprite(fr, q.x, q.y)
+          if (!f.shook && f.size >= 1) {
+            f.shook = true
+            this.addShake([0.4, 1.4, 2.8, 4.5][f.size])
+          }
+          if (f.t < 0.05 && f.size >= 1) {
+            if (f.size >= 2) {
+              // the whole view lights up for a moment
+              ctx.globalCompositeOperation = 'lighter'
+              ctx.fillStyle = `rgba(255,220,170,${0.09 * f.size * (1 - f.t / 0.05)})`
+              ctx.fillRect(0, 0, this.W, this.H)
+              ctx.globalCompositeOperation = 'source-over'
+            }
+          }
           break
         }
         case 'fire': {
@@ -465,13 +498,38 @@ export class Renderer {
           this.drawSprite(sp, q.x, q.y)
           break
         }
-        case 'flash':
+        case 'flash': {
           ctx.globalCompositeOperation = 'lighter'
-          ctx.fillStyle = '#ffe8a0'
-          ctx.fillRect(q.x - f.size, q.y - f.size, f.size * 2, f.size * 2)
+          if (f.size > 3) {
+            const r = Math.round(f.size * 3 * (1 - k * 0.5))
+            ctx.globalAlpha = 1 - k
+            ctx.drawImage(A.glowOf(r, 'rgba(255,240,200,1)'), q.x - r, q.y - r)
+            ctx.globalAlpha = 1
+          } else {
+            ctx.fillStyle = '#ffe8a0'
+            ctx.fillRect(q.x - f.size, q.y - f.size, f.size * 2, f.size * 2)
+          }
           ctx.fillStyle = '#ffffff'
           ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
           ctx.globalCompositeOperation = 'source-over'
+          break
+        }
+        case 'ring': {
+          // the pressure wave
+          const rr = Math.round(3 + k * (10 + f.size * 15))
+          ctx.globalAlpha = (1 - k) * 0.75
+          ctx.drawImage(this.ring(rr, 0xfff0d2), q.x - rr - 1, q.y - Math.floor(rr / 2) - 1)
+          if (rr > 4) {
+            const r2 = Math.round(rr * 0.8)
+            ctx.globalAlpha = (1 - k) * 0.5
+            ctx.drawImage(this.ring(r2, 0xb4a07c), q.x - r2 - 1, q.y - Math.floor(r2 / 2) - 1)
+          }
+          ctx.globalAlpha = 1
+          break
+        }
+        case 'ember':
+          ctx.fillStyle = k < 0.5 ? '#ffe070' : '#ff7a28'
+          ctx.fillRect(q.x, q.y, 1, k < 0.3 ? 2 : 1)
           break
         case 'spark':
           ctx.fillStyle = k < 0.5 ? '#fff0a0' : '#ff9a40'

@@ -163,7 +163,8 @@ function ifv(f: Faction): UnitModel {
 
 function artillery(f: Faction): UnitModel {
   const s = SCHEMES[f]
-  if (f === 'nato') {
+  if (f === 'ru') return msta()
+  {
     const hull = new Vox(12, 22, 6)
     tracks(hull, 0, 11, 3, 1, 20, 3, s)
     hull.box(1, 0, 2, 10, 21, 4, s.base)
@@ -186,7 +187,73 @@ function artillery(f: Faction): UnitModel {
     camo(turret, s, 42)
     return { hull, turret, mount: [0, -4, 5], muzzle: [22, 2.5] }
   }
-  // a rocket launcher on a six-wheeled truck
+  return grad()
+}
+
+/** 2S19 Msta-S: a long tracked hull and a big boxy turret with a heavy barrel */
+function msta(): UnitModel {
+  const s = SCHEMES.ru
+  const hull = new Vox(13, 23, 6)
+  tracks(hull, 0, 12, 3, 1, 21, 3, s)
+  hull.box(1, 0, 2, 11, 22, 4, s.base)
+  hull.box(1, 20, 4, 11, 22, 4, -1)
+  hull.box(1, 22, 3, 11, 22, 3, -1)
+  hull.box(0, 3, 2, 0, 19, 2, s.camo3)
+  hull.box(12, 3, 2, 12, 19, 2, s.camo3)
+  hull.cylX(1, 4.5, 1.2, 2, 10, shade(s.base, 0.8)) // spare fuel drums
+  hull.box(3, 1, 3, 9, 1, 3, s.team)
+  camo(hull, s, 45)
+  hull.py = 11.5
+  const turret = new Vox(12, 30, 8)
+  turret.box(0, 0, 0, 11, 12, 5, s.base)
+  turret.box(0, 12, 5, 11, 12, 5, -1)
+  turret.box(0, 0, 5, 1, 12, 5, -1)
+  turret.box(10, 0, 5, 11, 12, 5, -1)
+  turret.box(2, 1, 6, 4, 3, 6, s.dark) // commander's cupola
+  turret.box(8, 2, 6, 9, 3, 7, s.metal) // MG
+  turret.box(4, 12, 1, 7, 14, 4, s.dark) // mantlet
+  turret.box(5, 14, 2, 6, 29, 3, s.metal) // the barrel, thick
+  turret.box(4, 27, 2, 7, 29, 4, s.metal) // muzzle brake
+  turret.box(5, 18, 4, 6, 19, 4, s.metal) // fume extractor
+  turret.box(0, 4, 2, 0, 8, 3, s.team)
+  turret.box(11, 4, 2, 11, 8, 3, s.team)
+  turret.px = 6
+  turret.py = 5.5
+  camo(turret, s, 46)
+  return { hull, turret, mount: [0, -4, 5], muzzle: [24, 3] }
+}
+
+/** MARS II: a tracked carrier with a cab up front and a box of rockets that turns and lifts */
+function mars(): UnitModel {
+  const s = SCHEMES.nato
+  const hull = new Vox(12, 24, 9)
+  tracks(hull, 0, 11, 3, 1, 22, 3, s)
+  hull.box(1, 0, 2, 10, 23, 3, s.base)
+  hull.box(1, 17, 4, 10, 23, 7, s.base) // armoured cab
+  hull.box(1, 23, 6, 10, 23, 7, -1)
+  hull.box(2, 23, 5, 9, 23, 5, s.glass)
+  hull.box(0, 19, 5, 0, 21, 6, s.glass)
+  hull.box(11, 19, 5, 11, 21, 6, s.glass)
+  hull.box(1, 1, 4, 10, 15, 4, s.dark) // launcher bed
+  hull.box(3, 18, 8, 8, 20, 8, s.team)
+  camo(hull, s, 47)
+  hull.py = 12
+  const turret = new Vox(11, 16, 7)
+  turret.box(0, 0, 0, 10, 13, 5, s.base)
+  turret.box(5, 0, 0, 5, 13, 5, s.dark) // two pods side by side
+  for (let x = 1; x <= 9; x += 2) for (let z = 1; z <= 4; z += 2) if (x !== 5) turret.set(x, 13, z, s.track)
+  turret.box(0, 0, 6, 10, 2, 6, s.metal)
+  turret.box(0, 5, 3, 0, 8, 3, s.team)
+  turret.box(10, 5, 3, 10, 8, 3, s.team)
+  turret.px = 5.5
+  turret.py = 6
+  camo(turret, s, 48)
+  return { hull, turret, mount: [0, -4, 4], muzzle: [8, 3] }
+}
+
+/** BM-21 Grad: a rocket launcher on a six-wheeled truck */
+function grad(): UnitModel {
+  const s = SCHEMES.ru
   const hull = new Vox(10, 22, 9)
   for (const y of [3, 7, 11, 18]) {
     hull.cylX(y + 0.5, 1.5, 1.6, 0, 1, s.track)
@@ -380,6 +447,7 @@ export function unitModel(key: string, f: Faction): UnitModel {
     case 'mbt': return mbt(f)
     case 'ifv': return ifv(f)
     case 'art': return artillery(f)
+    case 'mlrs': return f === 'nato' ? mars() : grad()
     case 'aa': return flak(f)
     case 'harv': return { hull: harvester(f, false), alt: harvester(f, true) }
     case 'rifle': return { hull: soldier(f, 0, 'rifle'), alt: soldier(f, 1, 'rifle'), turret: soldier(f, 2, 'rifle'), muzzle: [3, 4] }

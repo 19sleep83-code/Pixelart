@@ -169,7 +169,7 @@ export interface Shot {
   src: number
 }
 
-export type FxKind = 'exp' | 'smoke' | 'fire' | 'flash' | 'spark' | 'dust' | 'debris' | 'wake' | 'splash'
+export type FxKind = 'exp' | 'smoke' | 'fire' | 'flash' | 'spark' | 'dust' | 'debris' | 'wake' | 'splash' | 'ring' | 'clod' | 'ember'
 export interface Fx {
   kind: FxKind
   x: number
@@ -181,6 +181,10 @@ export interface Fx {
   t: number
   life: number
   size: number
+  /** the camera has already been shaken for it */
+  shook?: boolean
+  /** drawn this much larger */
+  scale?: number
 }
 
 export interface Wreck {
@@ -1803,14 +1807,9 @@ export class Game {
         this.damage(e, s.dmg * (1 - (d / s.splash) * 0.6), s.cls, s.owner, s.src)
       }
       const shipHit = this.ents.some((e) => e.naval && !e.dead && Math.hypot(e.x - s.x1, e.y - s.y1) < e.radius + 0.3)
-      if (water && !shipHit) this.addFx('splash', s.x1, s.y1, 0, 0, 0, 0, 0.9, big ? 2 : 1)
-      else {
-        this.addFx('exp', s.x1, s.y1, 2, 0, 0, 0, 0.6, big ? 1 : 0)
-        if (big && !water) {
-          this.stamps.push({ kind: 'scorch', size: 0, x: s.x1, y: s.y1 })
-          for (let k = 0; k < 4; k++) this.addFx('debris', s.x1, s.y1, 2, (this.rand() - 0.5) * 2, (this.rand() - 0.5) * 2, 20 + this.rand() * 20, 0.8, 1)
-        }
-      }
+      const power = s.kind === 'art' ? 2.4 : s.kind === 'missile' ? 2.2 : s.kind === 'mlrs' ? 1.6 : big ? 1.5 : 0.9
+      if (water && !shipHit) this.boom(s.x1, s.y1, 0, power, 'water')
+      else this.boom(s.x1, s.y1, 2, power, water ? 'deck' : 'ground')
       this.onSound('boom', s.x1, s.y1)
       return
     }
@@ -1818,14 +1817,85 @@ export class Game {
     if (t && !t.dead) {
       this.damage(t, s.dmg, s.cls, s.owner, s.src)
       if (s.kind === 'shell' || s.kind === 'rocket') {
-        this.addFx('exp', s.x1, s.y1, s.z1, 0, 0, 0, 0.4, 0)
+        this.boom(s.x1, s.y1, s.z1, s.kind === 'rocket' ? 0.8 : 0.65, 'air')
         this.onSound('hit', s.x1, s.y1)
       } else this.addFx('spark', s.x1, s.y1, s.z1, 0, 0, 6, 0.25, 1)
     } else if (water) {
       this.addFx('splash', s.x1, s.y1, 0, 0, 0, 0, 0.6, 0)
+    } else if (s.kind === 'shell' || s.kind === 'rocket') {
+      this.boom(s.x1, s.y1, 1, 0.6, 'ground')
     } else {
-      this.addFx(s.kind === 'shell' || s.kind === 'rocket' ? 'exp' : 'dust', s.x1, s.y1, 1, 0, 0, 3, 0.4, s.kind === 'shell' || s.kind === 'rocket' ? 0 : 2)
+      this.addFx('dust', s.x1, s.y1, 1, 0, 0, 3, 0.4, 2)
     }
+  }
+
+  /**
+   * An explosion with weight behind it: a fireball and smaller blasts after it, a pressure ring
+   * across the ground, earth thrown up, embers, a column of smoke, a crater, and a shaken camera.
+   * `power`: 0.6 a shell hitting armour … 2.4 a heavy howitzer round … 4 a building going up.
+   */
+  boom(x: number, y: number, z: number, power: number, where: 'ground' | 'water' | 'air' | 'deck') {
+    const r = this.rand
+    const size = power >= 2.2 ? 3 : power >= 1.4 ? 2 : power >= 0.9 ? 1 : 0
+    if (where === 'water') {
+      this.addFx('splash', x, y, 0, 0, 0, 0, 1 + power * 0.25, Math.min(3, Math.round(power)))
+      this.addFx('ring', x, y, 0, 0, 0, 0, 0.5 + power * 0.15, power)
+      for (let k = 0; k < power * 6; k++) {
+        const a = r() * Math.PI * 2, v = (0.5 + r()) * power * 0.9
+        this.addFx('wake', x + Math.cos(a) * 0.3, y + Math.sin(a) * 0.3, 0, Math.cos(a) * v, Math.sin(a) * v, 0, 1.2, 2)
+      }
+      if (power >= 1.5) this.addFx('exp', x, y, 2, 0, 0, 0, 0.45, Math.max(0, size - 1))
+      return
+    }
+    // the fireball, then a few smaller blasts around it
+    this.addFx('exp', x, y, z, 0, 0, 0, 0.55 + size * 0.22, size)
+    if (power > 2.6) this.fx[this.fx.length - 1].scale = Math.min(2, power / 2.4)
+    this.addFx('flash', x, y, z + 2, 0, 0, 0, 0.12 + size * 0.04, 2 + power * 2)
+    const extra = power >= 1 ? Math.round(power * 1.3) : 0
+    for (let k = 0; k < extra; k++) {
+      const a = r() * Math.PI * 2, d = (0.25 + r() * 0.45) * Math.min(1.6, power * 0.5)
+      this.addFx('exp', x + Math.cos(a) * d, y + Math.sin(a) * d, z + r() * 6, 0, 0, 0, 0.45 + size * 0.1, Math.max(0, size - 1))
+      this.fx[this.fx.length - 1].t = -0.05 - r() * 0.25
+    }
+    if (where === 'air') {
+      for (let k = 0; k < 3 + power * 4; k++) {
+        const a = r() * Math.PI * 2, v = 0.8 + r() * 1.5
+        this.addFx('ember', x, y, z, Math.cos(a) * v, Math.sin(a) * v, 10 + r() * 25, 0.5 + r() * 0.4, 1)
+      }
+      this.addFx('smoke', x, y, z, 0, 0, 8, 1.6, 2 + size)
+      return
+    }
+    // the pressure ring rolls out over the ground
+    if (power >= 0.9) this.addFx('ring', x, y, 0, 0, 0, 0, 0.35 + power * 0.1, power)
+    // earth and stones thrown up
+    if (where === 'ground') {
+      // a fountain of earth: most of it goes up steeply, some flies wide
+      const n = Math.round(power * 16)
+      for (let k = 0; k < n; k++) {
+        const a = r() * Math.PI * 2
+        const steep = r() < 0.6
+        const v = (steep ? 0.2 + r() * 0.5 : 0.6 + r() * 1.2) * (0.7 + power * 0.5)
+        const up = steep ? 55 + r() * 45 * power : 25 + r() * 25 * power
+        this.addFx('clod', x + (r() - 0.5) * 0.2, y + (r() - 0.5) * 0.2, 2, Math.cos(a) * v, Math.sin(a) * v, up, 1.6 + r() * 1.4, r() < 0.4 ? 3 : 2)
+      }
+      // a curtain of dust round the base
+      for (let k = 0; k < Math.round(power * 3); k++) {
+        const a = r() * Math.PI * 2, v = 0.6 + r() * 0.8 * power
+        this.addFx('dust', x, y, 1, Math.cos(a) * v, Math.sin(a) * v, 3 + r() * 4, 1.8 + power * 0.6, 3 + power)
+      }
+    }
+    // glowing embers
+    for (let k = 0; k < Math.round(power * 6); k++) {
+      const a = r() * Math.PI * 2, v = (0.5 + r()) * (0.8 + power * 0.5)
+      this.addFx('ember', x, y, z + 3, Math.cos(a) * v, Math.sin(a) * v, 20 + r() * 35 * power, 0.6 + r() * 0.8, 1)
+    }
+    // a column of smoke that stays a while
+    for (let k = 0; k < Math.round(2 + power * 2.5); k++) {
+      this.addFx('smoke', x + (r() - 0.5) * 0.5, y + (r() - 0.5) * 0.5, z + 2 + k * 4, (r() - 0.5) * 0.15, (r() - 0.5) * 0.15, 4 + r() * 6, 3 + power * 1.6, 4 + Math.min(4, power * 1.6))
+      this.fx[this.fx.length - 1].t = -0.25 - k * 0.15
+    }
+    if (where === 'ground' && power >= 1.4) this.stamps.push({ kind: 'scorch', size: power >= 3 ? 2 : 1, x, y })
+    else if (where === 'ground' && power >= 0.9) this.stamps.push({ kind: 'scorch', size: 0, x, y })
   }
 
   private distPt(b: Ent, x: number, y: number): number {
@@ -1904,13 +1974,15 @@ export class Game {
       return
     }
     const z = e.air ? e.z : e.naval ? 6 : 4
-    this.addFx('exp', e.x, e.y, z, 0, 0, 0, 0.75, e.naval && e.radius > 0.7 ? 2 : 1)
-    for (let k = 0; k < 6; k++) this.addFx('debris', e.x, e.y, z + 4, (this.rand() - 0.5) * 3, (this.rand() - 0.5) * 3, 25 + this.rand() * 25, 1, 1)
     const water = this.wet(e.x, e.y)
+    const heavy = e.u!.armor === 'heavy' || e.radius > 0.7
+    this.boom(e.x, e.y, z, e.naval ? (e.radius > 0.7 ? 3.4 : 2.2) : heavy ? 2.6 : 1.8, e.air ? 'air' : e.naval ? 'deck' : 'ground')
+    for (let k = 0; k < (heavy ? 10 : 6); k++) this.addFx('debris', e.x, e.y, z + 4, (this.rand() - 0.5) * 4, (this.rand() - 0.5) * 4, 30 + this.rand() * 35, 1.4, 1)
+    // a tank's turret goes up in the air
+    if (e.u!.armor === 'heavy') this.addFx('debris', e.x, e.y, z + 8, (this.rand() - 0.5) * 1.5, (this.rand() - 0.5) * 1.5, 70, 1.8, 3)
     if (e.jet || (e.air && water)) {
       if (water) this.addFx('splash', e.x, e.y, 0, 0, 0, 0, 1, 2)
     } else {
-      if (!e.naval && !water) this.stamps.push({ kind: 'scorch', size: 1, x: e.x, y: e.y })
       this.wrecks.push({ key: e.key, owner: e.owner, x: e.x, y: e.y, dir: e.dir, tdir: e.tdir, t: 0, air: e.air, naval: e.naval })
     }
     this.onSound('explode', e.x, e.y)
@@ -1922,12 +1994,19 @@ export class Game {
     this.byId.delete(e.id)
     for (let y = e.ty; y < e.ty + e.h; y++) for (let x = e.tx; x < e.tx + e.w; x++) if (this.map.bld[this.map.idx(x, y)] === e.id) this.map.bld[this.map.idx(x, y)] = 0
     if (destroyed) {
-      for (let k = 0; k < 3 + e.w * 2; k++) {
+      // a chain of blasts through the building, then the big one
+      const n = 2 + e.w * 2
+      for (let k = 0; k < n; k++) {
         const x = e.tx + this.rand() * e.w, y = e.ty + this.rand() * e.h
-        this.addFx('exp', x, y, 4 + this.rand() * 10, 0, 0, 0, 0.75, e.w >= 3 ? 2 : 1)
-        this.fx[this.fx.length - 1].t = -this.rand() * 0.8
+        const before = this.fx.length
+        this.boom(x, y, 4 + this.rand() * 10, 1.4 + this.rand() * 0.8, 'deck')
+        const delay = (k / n) * 1.1
+        for (let i = before; i < this.fx.length; i++) this.fx[i].t -= delay
       }
-      for (let k = 0; k < 10; k++) this.addFx('debris', e.x, e.y, 10, (this.rand() - 0.5) * 4, (this.rand() - 0.5) * 4, 30 + this.rand() * 30, 1.2, 1)
+      const before = this.fx.length
+      this.boom(e.x, e.y, 6, e.w >= 3 ? 4 : 3.2, 'ground')
+      for (let i = before; i < this.fx.length; i++) this.fx[i].t -= 1.2
+      for (let k = 0; k < 14; k++) this.addFx('debris', e.x, e.y, 10, (this.rand() - 0.5) * 5, (this.rand() - 0.5) * 5, 30 + this.rand() * 40, 1.6, 1 + (k % 3))
       this.stamps.push({ kind: 'rubble', size: Math.min(3, e.w), x: e.x, y: e.y })
       this.msg(`${e.b!.name} zerstört`, e.owner === 0 ? 'warn' : 'good')
       this.onSound('collapse', e.x, e.y)
@@ -1938,7 +2017,7 @@ export class Game {
   // ─────────────────────────────────────────────────────── effects and fog
 
   addFx(kind: FxKind, x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number) {
-    if (this.fx.length > 900) return
+    if (this.fx.length > 1800) return
     this.fx.push({ kind, x, y, z, vx, vy, vz, t: 0, life, size })
   }
 
@@ -1950,13 +2029,13 @@ export class Game {
       f.x += f.vx * dt
       f.y += f.vy * dt
       f.z += f.vz * dt
-      if (f.kind === 'debris') {
-        f.vz -= 70 * dt
+      if (f.kind === 'debris' || f.kind === 'clod' || f.kind === 'ember') {
+        f.vz -= (f.kind === 'ember' ? 25 : 70) * dt
         if (f.z < 0) {
           f.z = 0
-          f.vz *= -0.3
-          f.vx *= 0.5
-          f.vy *= 0.5
+          f.vz *= f.kind === 'clod' ? -0.15 : -0.3
+          f.vx *= f.kind === 'clod' ? 0.2 : 0.5
+          f.vy *= f.kind === 'clod' ? 0.2 : 0.5
         }
       } else if (f.kind === 'smoke') {
         f.vx += 0.12 * dt // a light wind

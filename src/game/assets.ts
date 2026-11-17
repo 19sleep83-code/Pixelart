@@ -43,6 +43,7 @@ export class Assets {
   explosions: Sprite[][] = []
   smoke: Sprite[] = []
   dust: Sprite[] = []
+  soot: Sprite[] = []
   fire: Sprite[] = []
   rubble: Sprite[] = []
   scorch: Sprite[] = []
@@ -98,41 +99,48 @@ export function mountOffset(mount: [number, number, number], yaw: number): [numb
   return [rx - ry, (rx + ry) * 0.5 - c * KZ]
 }
 
-function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'fire' | 'scorch' | 'rubble'> {
+function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 'scorch' | 'rubble'> {
   const FIRE = [0xfffbe0, 0xffe07a, 0xffb13a, 0xf07a26, 0xc4461c, 0x7a2c18].map((c) => c)
   const explosions: Sprite[][] = []
-  for (const R of [5, 9, 15]) {
+  for (const R of [5, 9, 15, 24]) {
     const frames: Sprite[] = []
-    const F = 12
+    const F = 14
     for (let f = 0; f < F; f++) {
       const t = f / (F - 1)
-      const S = R * 2 + 6
-      const px = new Uint32Array(S * S)
-      const rad = R * (0.45 + 0.65 * Math.sqrt(t))
-      for (let y = 0; y < S; y++)
+      const S = R * 2 + 8
+      const H = Math.round(S * 1.25)
+      const px = new Uint32Array(S * H)
+      // a fireball that swells and rises, with a dark sooty rim, then turns to smoke
+      const rad = R * (0.4 + 0.7 * Math.sqrt(t))
+      const cy = H * 0.62 - t * R * 0.55
+      for (let y = 0; y < H; y++)
         for (let x = 0; x < S; x++) {
-          const dx = x - S / 2 + 0.5, dy = (y - S / 2 + 0.5) * 1.25
+          const dx = x - S / 2 + 0.5, dy = (y - cy) * 1.15
           const d = Math.hypot(dx, dy) / rad
-          const n = hash2(x >> 1, y >> 1, R * 31 + (f >> 2)) * 0.5 + hash2(x, y, f) * 0.25
-          if (d > 1 + n * 0.25) continue
-          const heat = 1.25 - t * 1.35 - d * 0.55 + n * 0.35
-          if (t > 0.55 && heat < 0.15) {
-            // smoke at the end
-            if (hash2(x, y, f + 7) < 0.5 + (1 - t)) px[y * S + x] = toABGR(mix(0x4a4744, 0x26221f, d), Math.round(220 * (1 - t) + 60))
+          const lump = hash2(x >> 1, y >> 1, R * 31 + (f >> 2)) * 0.45 + hash2(x >> 2, y >> 2, R + f) * 0.35
+          if (d > 0.95 + lump * 0.35) continue
+          const heat = 1.35 - t * 1.45 - d * 0.62 + lump * 0.4
+          if (heat < 0.12) {
+            if (t > 0.25 && hash2(x, y, f + 7) < 0.4 + (1 - t)) px[y * S + x] = toABGR(mix(0x55504a, 0x221e1b, Math.min(1, d)), Math.round(230 * (1 - t * 0.7)))
+            continue
+          }
+          if (d > 0.78 + lump * 0.3 && t > 0.15) {
+            px[y * S + x] = toABGR(0x3a2a20)
             continue
           }
           const k = Math.max(0, Math.min(FIRE.length - 1, Math.floor((1 - Math.max(0, Math.min(1, heat))) * FIRE.length)))
           px[y * S + x] = toABGR(FIRE[k])
         }
-      frames.push(toSprite(px, S, S, S >> 1, S >> 1))
+      frames.push(toSprite(px, S, H, S >> 1, Math.round(H * 0.62)))
     }
     explosions.push(frames)
   }
   // dithered smoke puffs, light on top
   const smoke: Sprite[] = []
   const dust: Sprite[] = []
+  const soot: Sprite[] = []
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-  for (const [list, cols] of [[smoke, [0xc8c6c0, 0x8a8782, 0xa9a6a0]], [dust, [0xc8b48c, 0x8a7656, 0xa89470]]] as [Sprite[], number[]][])
+  for (const [list, cols] of [[smoke, [0xc8c6c0, 0x8a8782, 0xa9a6a0]], [dust, [0xc8b48c, 0x8a7656, 0xa89470]], [soot, [0x6e6a64, 0x2e2b28, 0x4a4642]]] as [Sprite[], number[]][])
   for (let r = 1; r <= 9; r++) {
     const S = r * 2 + 3
     const px = new Uint32Array(S * S)
@@ -193,7 +201,7 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'fire' | 'scorch' 
       }
     rubble.push(toSprite(px, W, H, W >> 1, H >> 1))
   }
-  return { explosions, smoke, dust, fire, scorch, rubble }
+  return { explosions, smoke, dust, soot, fire, scorch, rubble }
 }
 
 export async function buildAssets(onProgress: (t: number, what: string) => void): Promise<Assets> {

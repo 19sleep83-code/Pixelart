@@ -118,8 +118,8 @@ export class AI {
       const radar = g.hasBuilding(this.p, 'radar')
       const enemyAir = g.ents.some((e) => e.owner !== this.p && e.air && !e.dead)
       const roll = this.r()
-      let key = roll < 0.42 ? 'mbt' : roll < 0.72 ? 'ifv' : roll < 0.86 ? 'art' : 'aa'
-      if (!radar && (key === 'art' || key === 'aa')) key = 'mbt'
+      let key = roll < 0.4 ? 'mbt' : roll < 0.66 ? 'ifv' : roll < 0.76 ? 'art' : roll < 0.86 ? 'mlrs' : 'aa'
+      if (!radar && (key === 'art' || key === 'mlrs' || key === 'aa')) key = 'mbt'
       if (enemyAir && radar && this.mine('aa').length < 3) key = 'aa'
       g.queueItem(this.p, 'veh', key)
     }
