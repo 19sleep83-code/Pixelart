@@ -359,8 +359,9 @@ function leopardTurret(): Vox {
   // the long L55 gun with its thermal sleeve and muzzle
   m.box(6, 13, 1, 8, 15, 3, GUN)
   m.box(7, 15, 2, 7, 35, 2, GUN)
-  m.box(6, 15, 2, 8, 30, 2, s.dark)
-  m.box(6, 33, 1, 8, 34, 3, GUN)
+  m.box(7, 15, 2, 7, 30, 2, s.dark)
+  for (const y of [19, 24, 29]) m.box(7, y, 2, 7, y, 2, shade(s.dark, 0.8)) // the sleeve's straps
+  m.box(7, 35, 2, 7, 35, 2, GUN_HI)
   camo(m, s, 'nato', 12)
   m.px = 7.5
   m.py = 7
@@ -420,7 +421,7 @@ function t90Turret(): Vox {
   // the 125 mm gun with its thermal sleeve and fume extractor
   m.box(6, 13, 1, 8, 14, 2, GUN)
   m.box(7, 14, 2, 7, 33, 2, GUN)
-  m.box(6, 18, 1, 8, 20, 3, s.dark)
+  m.box(6.5, 18, 1.5, 7.5, 20, 2.5, s.dark)
   camo(m, s, 'ru', 14)
   m.px = 7.5
   m.py = 7
@@ -461,7 +462,7 @@ function marderTurret(): Vox {
   m.box(1, 1, 0, 8, 8, 3, s.base)
   m.box(1, 8, 3, 8, 8, 3, -1)
   m.box(4, 8, 1, 5, 9, 2, GUN)
-  m.box(4, 9, 2, 4, 19, 2, GUN) // 20 mm cannon
+  m.rod(4.5, 9, 2.5, 4.5, 19, 2.5, GUN) // 20 mm cannon
   m.box(9, 3, 3, 9, 9, 4, hex('5d6845')) // MILAN on the side
   m.set(9, 10, 4, hex('6a7448'))
   hatch(m, 2, 3, 4, s.base)
@@ -504,8 +505,8 @@ function bmpTurret(): Vox {
   m.ball(5, 5, 0.4, 4.4, 4.4, 3, s.base)
   m.box(0, 0, -1, 9, 9, -1, -1)
   m.box(4, 8, 1, 5, 9, 2, GUN)
-  m.box(5, 9, 2, 5, 21, 2, GUN) // the 2A42 with its muzzle
-  m.box(4, 19, 1, 6, 20, 3, GUN)
+  m.rod(5.5, 9, 2.5, 5.5, 21, 2.5, GUN) // the 2A42 with its muzzle
+  m.box(5, 19.5, 2, 5, 20.5, 2, GUN)
   m.box(2, 2, 4, 6, 3, 4, hex('6a7448')) // Konkurs tube on the roof
   m.box(2, 3, 4, 2, 9, 4, hex('6a7448'))
   smokeCups(m, 0, 4, 1, 2, GUN)
@@ -544,7 +545,7 @@ function fennek(): Vox {
 function fennekTurret(): Vox {
   const m = new Vox(5, 10, 3)
   m.box(1, 0, 0, 3, 3, 1, GUN)
-  m.box(2, 3, 1, 2, 9, 1, GUN)
+  m.rod(2.5, 3, 1.5, 2.5, 9, 1.5, GUN)
   m.px = 2.5
   m.py = 2
   return m
@@ -575,7 +576,7 @@ function brdmTurret(): Vox {
   const m = new Vox(7, 13, 4)
   m.cylZ(3.5, 3.5, 3, 0, 1, s.base)
   m.cylZ(3.5, 3.5, 2.2, 2, 2, s.base)
-  m.box(3, 5, 1, 3, 12, 1, GUN)
+  m.rod(3.5, 5, 1.5, 3.5, 12, 1.5, GUN)
   m.px = 3.5
   m.py = 3.5
   camo(m, s, 'ru', 73)
@@ -610,8 +611,8 @@ function gepardTurret(angle: number): Vox {
   // the guns in their side mounts
   for (const x0 of [0, 16]) {
     m.box(x0, 5, 2, x0 + 2, 12, 5, s.dark)
-    m.box(x0 + 1, 12, 3, x0 + 1, 24, 3, GUN)
-    m.box(x0, 22, 2, x0 + 2, 23, 4, GUN)
+    m.rod(x0 + 1.5, 12, 3.5, x0 + 1.5, 24, 3.5, GUN)
+    m.box(x0 + 1, 22, 3, x0 + 1, 23, 3, GUN)
   }
   // tracking radar dish in front
   m.ball(9, 14.5, 4, 2.4, 1, 2.4, GUN_HI)
@@ -662,8 +663,8 @@ function tunguskaTurret(angle: number): Vox {
     m.box(x0, 3, 3, x0 + 3, 10, 6, s.camo2)
     for (let x = x0; x <= x0 + 3; x += 2) for (let z = 3; z <= 6; z += 2) m.set(x, 10, z, s.track)
     // twin guns below
-    m.box(left ? 4 : 16, 6, 2, left ? 4 : 16, 20, 2, GUN)
-    m.box(left ? 4 : 16, 6, 1, left ? 4 : 16, 18, 1, GUN)
+    m.rod(left ? 4.5 : 16.5, 6, 2.5, left ? 4.5 : 16.5, 20, 2.5, GUN)
+    m.rod(left ? 4.5 : 16.5, 6, 1.5, left ? 4.5 : 16.5, 18, 1.5, GUN)
   }
   // tracking radar in front, search radar on top at the back, turning
   m.ball(10, 13, 4, 2, 1, 2, GUN_HI)
@@ -711,9 +712,10 @@ function pzhTurret(): Vox {
   m.box(13, 0, 7, 14, 16, 7, -1)
   // the 155 mm barrel with fume extractor and multi-baffle muzzle brake
   m.box(6, 16, 2, 9, 18, 5, s.dark)
-  m.box(7, 18, 3, 8, 41, 4, GUN)
-  m.box(6, 24, 3, 9, 26, 4, GUN)
-  m.box(6, 38, 2, 9, 41, 5, GUN)
+  m.box(7.5, 18, 3.5, 7.5, 41, 3.5, GUN)
+  m.box(7, 24, 3, 8, 26, 4, GUN)
+  m.box(7, 38, 3, 8, 41, 4, GUN)
+  m.box(7, 39, 3, 8, 39, 4, GUN_HI) // the baffles of the muzzle brake
   // hatches, MG ring, smoke cups, stowage boxes
   hatch(m, 3, 4, 8, s.base)
   hatch(m, 10, 4, 8, s.base)
@@ -760,9 +762,9 @@ function mstaTurret(): Vox {
   m.box(2, 1, 7, 5, 4, 8, s.dark) // commander's cupola
   m.box(11, 2, 7, 12, 6, 7, GUN) // remote MG
   m.box(6, 16, 1, 9, 18, 5, s.dark)
-  m.box(7, 18, 3, 8, 39, 4, GUN)
-  m.box(6, 24, 2, 9, 26, 5, GUN) // fume extractor
-  m.box(6, 36, 2, 9, 38, 5, GUN) // muzzle brake
+  m.box(7.5, 18, 3.5, 7.5, 39, 3.5, GUN)
+  m.box(7, 24, 3, 8, 26, 4, GUN) // fume extractor
+  m.box(7, 36, 3, 8, 38, 4, GUN) // muzzle brake
   smokeCups(m, 0, 14, 4, 3, GUN)
   smokeCups(m, 13, 14, 4, 3, GUN)
   m.box(0, 5, 2, 0, 10, 4, s.team)
