@@ -65,6 +65,8 @@ export interface UnitDef {
   infantry?: boolean
   harvester?: boolean
   naval?: boolean
+  /** a ship's hull: half its length and half its beam, in tiles */
+  hull?: [number, number]
   /** flies strikes from an airfield or a carrier and comes back */
   jet?: boolean
   /** carries this many units */
@@ -195,30 +197,30 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
       key: 'boat', name: nato ? 'Schnellboot S143' : 'Raptor', role: 'Patrouillenboot', desc: 'Schnelles Boot mit MG. Jagt Infanterie am Ufer und andere Boote.',
       cost: 500, time: 7, hp: 260, armor: 'ship', speed: 2.9, turn: 3, sight: 8, radius: 0.55,
       weapon: { cls: 'mg', proj: 'bullet', dmg: 11, range: 5.5, reload: 0.8, burst: 4, gap: 0.08, ground: true, air: true },
-      queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true,
+      queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true, hull: [nato ? 1.0 : 0.82, 0.31],
     },
     corvette: {
       key: 'corvette', name: nato ? 'Korvette K130' : 'Steregushchiy', role: 'Korvette', desc: 'Allrounder mit Schnellfeuerkanone gegen Schiffe, Ufer und Luft.',
       cost: 1000, time: 12, hp: 620, armor: 'ship', speed: 2.0, turn: 1.8, sight: 9, radius: 0.75,
       weapon: { cls: 'auto', proj: 'shell', dmg: 24, range: 7, reload: 1.6, burst: 3, gap: 0.2, ground: true, air: true },
-      queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true,
+      queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true, hull: [1.38, 0.41],
     },
     destroyer: {
       key: 'destroyer', name: nato ? 'Arleigh Burke' : 'Slava-Kreuzer', role: nato ? 'Zerstörer' : 'Raketenkreuzer', desc: 'Marschflugkörper mit großer Reichweite gegen Ziele an Land und auf See.',
       cost: 1900, time: 18, hp: nato ? 1000 : 1150, armor: 'ship', speed: nato ? 1.6 : 1.4, turn: 1.2, sight: 10, radius: 1.0,
       weapon: { cls: 'missile', proj: 'missile', dmg: 95, range: nato ? 14 : 13, minRange: 3, reload: nato ? 5 : 6, burst: nato ? 2 : 3, gap: 0.45, splash: 0.9, ground: true, air: false, sea: true },
-      queue: 'sea', producer: 'shipyard', req: ['shipyard', 'radar'], naval: true,
+      queue: 'sea', producer: 'shipyard', req: ['shipyard', 'radar'], naval: true, hull: [nato ? 1.88 : 1.94, 0.52],
     },
     lander: {
       key: 'lander', name: nato ? 'LCU 1700' : 'Ondatra', role: 'Landungsschiff', desc: 'Bringt bis zu 5 Bodeneinheiten über das Wasser. Einladen: Einheiten wählen, Rechtsklick aufs Schiff.',
       cost: 700, time: 9, hp: 520, armor: 'ship', speed: 1.9, turn: 2, sight: 6, radius: 0.8,
-      queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true, transport: 5,
+      queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true, hull: [1.12, 0.47], transport: 5,
     },
     carrier: {
       key: 'carrier', name: nato ? 'Nimitz' : 'Admiral Kusnezow', role: 'Flugzeugträger', desc: 'Trägt drei eigene Jets, die selbstständig Ziele in weitem Umkreis angreifen. Flak zur Selbstverteidigung.',
       cost: 3200, time: 30, hp: 1900, armor: 'ship', speed: 1.1, turn: 0.8, sight: 11, radius: 1.5,
       weapon: { cls: 'flak', proj: 'flak', dmg: 12, range: 6, reload: 0.9, burst: 4, gap: 0.08, ground: false, air: true, sea: false },
-      queue: 'sea', producer: 'shipyard', req: ['shipyard', 'airfield'], naval: true, carrier: 3,
+      queue: 'sea', producer: 'shipyard', req: ['shipyard', 'airfield'], naval: true, hull: [2.62, 0.8], carrier: 3,
     },
   }
 }

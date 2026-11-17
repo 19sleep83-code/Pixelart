@@ -850,8 +850,8 @@ export class Game {
     }
     const cx = Math.floor(x), cy = Math.floor(y)
     const tiles: { x: number; y: number; d: number }[] = []
-    const need = units.reduce((n, u) => n + (u.u!.infantry ? 0.34 : u.radius > 0.7 ? 3 : 1), 0)
-    for (let r = 0; r < 16 && tiles.length < need * 1.2 + 1; r++)
+    const need = units.reduce((n, u) => n + (u.u!.infantry ? 0.34 : u.naval ? Math.pow(2 * Math.ceil((u.u!.hull?.[0] ?? 1) * 0.6) + 1, 2) : u.radius > 0.7 ? 3 : 1), 0)
+    for (let r = 0; r < (naval ? 22 : 16) && tiles.length < need * 1.6 + 1; r++)
       for (let dy = -r; dy <= r; dy++)
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
@@ -867,15 +867,23 @@ export class Game {
     for (const i of order) {
       const inf = units[i].u!.infantry
       const big = units[i].radius > 0.7
+      // a ship needs clear water for its whole hull
+      const rr = naval ? Math.max(1, Math.ceil((units[i].u!.hull?.[0] ?? units[i].radius) * 0.6)) : big ? 1 : 0
+      const clear = (t: { x: number; y: number }) => {
+        if (!naval) return true
+        for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++) if ((fill.get(m.idx(Math.max(0, Math.min(m.N - 1, t.x + dx)), Math.max(0, Math.min(m.N - 1, t.y + dy)))) ?? 0) !== 0) return false
+        return true
+      }
       for (const t of tiles) {
         const k = m.idx(t.x, t.y)
         const used = fill.get(k) ?? 0
-        if (inf ? used < 3 && used !== -1 : used === 0) {
+        if (inf ? used < 3 && used !== -1 : used === 0 && clear(t)) {
           const o = inf ? OFF[used + 1] : OFF[0]
           out[i] = { x: t.x + o[0], y: t.y + o[1] }
           fill.set(k, inf ? used + 1 : -1)
-          if (big)
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (m.inMap(t.x + dx, t.y + dy)) fill.set(m.idx(t.x + dx, t.y + dy), -1)
+          if (rr) {
+            for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++) if (m.inMap(t.x + dx, t.y + dy)) fill.set(m.idx(t.x + dx, t.y + dy), -1)
+          }
           break
         }
       }
@@ -1859,7 +1867,11 @@ export class Game {
       const a = list[i]
       if (a.isB || a.dead || a.air || a.carriedBy || a.inside) continue
       const cx = Math.floor(a.x), cy = Math.floor(a.y)
-      const reach = a.naval ? 2 : 1
+      if (a.naval) {
+        this.separateShip(a, i, dt)
+        continue
+      }
+      const reach = 1
       for (let ty = cy - reach; ty <= cy + reach; ty++) {
         if (ty < 0 || ty >= N) continue
         for (let tx = cx - reach; tx <= cx + reach; tx++) {
@@ -1883,6 +1895,61 @@ export class Game {
             this.tryMove(a, -ux * push * 2 * wa, -uy * push * 2 * wa)
             this.tryMove(b, ux * push * 2 * (1 - wa), uy * push * 2 * (1 - wa))
           }
+        }
+      }
+    }
+  }
+
+  /** a ship's keel: the line along its middle, and how far its sides stand off it */
+  private keel(u: Ent): { x0: number; y0: number; x1: number; y1: number; w: number } {
+    const [hl, hw] = u.u!.hull ?? [u.radius, u.radius]
+    const k = Math.max(0, hl - hw)
+    const c = Math.cos(u.dir), s = Math.sin(u.dir)
+    return { x0: u.x - c * k, y0: u.y - s * k, x1: u.x + c * k, y1: u.y + s * k, w: hw }
+  }
+
+  /** ships are long: they keep apart as capsules, and the smaller one gives way */
+  private separateShip(a: Ent, i: number, dt: number) {
+    const N = this.map.N
+    const list = this.list
+    const ka = this.keel(a)
+    const reach = Math.ceil((a.u!.hull?.[0] ?? a.radius) + 2.8)
+    const cx = Math.floor(a.x), cy = Math.floor(a.y)
+    for (let ty = cy - reach; ty <= cy + reach; ty++) {
+      if (ty < 0 || ty >= N) continue
+      for (let tx = cx - reach; tx <= cx + reach; tx++) {
+        if (tx < 0 || tx >= N) continue
+        for (let j = this.head[ty * N + tx]; j >= 0; j = this.next[j]) {
+          if (j === i) continue
+          const b = list[j]
+          if (b.dead || !b.naval) continue
+          // each pair once: from the bigger hull, or the lower index between equals
+          const ha = a.u!.hull?.[0] ?? a.radius, hb = b.u!.hull?.[0] ?? b.radius
+          if (hb > ha || (hb === ha && j < i)) continue
+          const kb = this.keel(b)
+          const c = segClosest(ka, kb)
+          const min = ka.w + kb.w + 0.12
+          if (c.d >= min) continue
+          let ux: number, uy: number
+          if (c.d < 1e-4) {
+            // right on top of each other: push sideways from a's keel
+            ux = -Math.sin(a.dir)
+            uy = Math.cos(a.dir)
+          } else {
+            ux = (c.bx - c.ax) / c.d
+            uy = (c.by - c.ay) / c.d
+          }
+          const over = (min - c.d) * Math.min(1, dt * 10)
+          // the bigger ship and the one standing still give way less
+          const ma = (a.u!.hull?.[0] ?? 1) * (a.u!.hull?.[1] ?? 1) * (a.moving ? 1 : 1.6)
+          const mb = (b.u!.hull?.[0] ?? 1) * (b.u!.hull?.[1] ?? 1) * (b.moving ? 1 : 1.6)
+          const wa = mb / (ma + mb)
+          this.tryMove(a, -ux * over * wa, -uy * over * wa)
+          this.tryMove(b, ux * over * (1 - wa), uy * over * (1 - wa))
+          // the one behind slows down instead of ramming
+          const ahead = (x: Ent, y: Ent) => Math.cos(x.dir) * (y.x - x.x) + Math.sin(x.dir) * (y.y - x.y) > 0
+          if (a.moving && ahead(a, b)) a.speedNow *= 1 - Math.min(0.5, dt * 4)
+          if (b.moving && ahead(b, a)) b.speedNow *= 1 - Math.min(0.5, dt * 4)
         }
       }
     }
@@ -2402,4 +2469,36 @@ export function turnTo(a: number, b: number, step: number): number {
   const d = angDiff(a, b)
   if (Math.abs(d) <= step) return b
   return a + Math.sign(d) * step
+}
+
+/** the closest points between two segments, and how far apart they are */
+function segClosest(a: { x0: number; y0: number; x1: number; y1: number }, b: { x0: number; y0: number; x1: number; y1: number }) {
+  const dx1 = a.x1 - a.x0, dy1 = a.y1 - a.y0, dx2 = b.x1 - b.x0, dy2 = b.y1 - b.y0
+  const rx = a.x0 - b.x0, ry = a.y0 - b.y0
+  const aa = dx1 * dx1 + dy1 * dy1, ee = dx2 * dx2 + dy2 * dy2, ff = dx2 * rx + dy2 * ry
+  let s = 0, t = 0
+  const cl = (v: number) => Math.max(0, Math.min(1, v))
+  if (aa < 1e-9 && ee < 1e-9) {
+    s = t = 0
+  } else if (aa < 1e-9) {
+    t = cl(ff / ee)
+  } else {
+    const c = dx1 * rx + dy1 * ry
+    if (ee < 1e-9) s = cl(-c / aa)
+    else {
+      const bb = dx1 * dx2 + dy1 * dy2
+      const den = aa * ee - bb * bb
+      s = den > 1e-9 ? cl((bb * ff - c * ee) / den) : 0
+      t = (bb * s + ff) / ee
+      if (t < 0) {
+        t = 0
+        s = cl(-c / aa)
+      } else if (t > 1) {
+        t = 1
+        s = cl((bb - c) / aa)
+      }
+    }
+  }
+  const ax = a.x0 + dx1 * s, ay = a.y0 + dy1 * s, bx = b.x0 + dx2 * t, by = b.y0 + dy2 * t
+  return { ax, ay, bx, by, d: Math.hypot(bx - ax, by - ay) }
 }

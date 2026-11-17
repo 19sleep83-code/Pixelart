@@ -2,7 +2,7 @@
 
 import { Rot, renderSprite, renderShadow, makeCanvas, toSprite, type Sprite, type Vox } from '../core/voxel'
 import { toABGR, mix, shade, KZ, SCALE } from '../core/iso'
-import { hash2 } from '../core/rng'
+import { hash2, fbm } from '../core/rng'
 import { unitModel, buildingModel, treeModel, houseModel, oreModel, titleModel } from './models'
 import type { Faction } from './colors'
 import { UNIT_ORDER, BUILD_ORDER } from './defs'
@@ -142,28 +142,50 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 
     }
     explosions.push(frames)
   }
-  // dithered smoke puffs, light on top
+  // billowing smoke puffs: a few round lumps together, lit from the upper left with dithered
+  // shades and a frayed rim, so that stacks of them read as one soft column
   const smoke: Sprite[] = []
   const dust: Sprite[] = []
   const soot: Sprite[] = []
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-  for (const [list, cols] of [[smoke, [0xc8c6c0, 0x8a8782, 0xa9a6a0]], [dust, [0xc8b48c, 0x8a7656, 0xa89470]], [soot, [0x6e6a64, 0x2e2b28, 0x4a4642]]] as [Sprite[], number[]][])
+  for (const [list, cols] of [[smoke, [0x8a8782, 0xa9a6a0, 0xc8c6c0, 0xdedcd6]], [dust, [0x8a7656, 0xa89470, 0xc8b48c, 0xdccaa4]], [soot, [0x2a2724, 0x3e3a36, 0x56514c, 0x726c66]]] as [Sprite[], number[]][])
   for (let i = 1; i <= (list === soot ? 14 : 9); i++) {
     const r = list === soot ? i * 3 * SCALE : i * SCALE
     const S = r * 2 + 3
     const px = new Uint32Array(S * S)
+    const seed = r * 13 + (list === soot ? 7 : list === dust ? 3 : 1)
+    // the lumps: a big one in the middle and a few around it, a little higher up
+    const lumps: [number, number, number][] = [[0, 0.08, 0.78]]
+    for (let k = 0; k < 4; k++) {
+      const a = hash2(k, seed, 3) * Math.PI * 2
+      lumps.push([Math.cos(a) * 0.38, Math.sin(a) * 0.3 - 0.12, 0.42 + hash2(k, seed, 5) * 0.16])
+    }
+    const curl = Math.max(2, r * 0.45)
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
-        const dx = x - S / 2 + 0.5, dy = y - S / 2 + 0.5
-        const d = Math.hypot(dx, dy) / (r + 0.3)
-        if (d > 1) continue
-        const lit = dy < -r * 0.3 || dx < -r * 0.4
-        // a lumpy edge and a few darker curls inside
-        const lump = hash2(x >> 2, y >> 2, r) * 0.18
-        if (d > 0.88 - lump) continue
-        const c = lit ? cols[0] : d > 0.7 ? cols[1] : hash2(x >> 1, y >> 1, r + 5) < 0.15 ? cols[1] : cols[2]
-        if (d > 0.75 && BAYER[(y & 3) * 4 + (x & 3)] < 8) continue
-        px[y * S + x] = toABGR(c)
+        const nx = (x - S / 2 + 0.5) / r, ny = (y - S / 2 + 0.5) / r
+        // how deep inside the nearest lump, 0 at its rim
+        let inside = -1, lx = 0, ly = 0, lr = 1
+        for (const [cx, cy, cr] of lumps) {
+          const v = 1 - Math.hypot(nx - cx, ny - cy) / cr
+          if (v > inside) {
+            inside = v
+            lx = (nx - cx) / cr
+            ly = (ny - cy) / cr
+            lr = cr
+          }
+        }
+        const n = fbm(x, y, curl, seed, 2) - 0.5
+        const edge = inside + n * 0.35
+        if (edge <= 0) continue
+        const b = BAYER[(y & 3) * 4 + (x & 3)] / 16
+        // a frayed, thinning rim
+        if (edge < 0.16 && b > edge / 0.16) continue
+        // light from the upper left on a round lump, curls of shade inside
+        const z = Math.sqrt(Math.max(0, 1 - lx * lx - ly * ly))
+        const light = (-lx * 0.5 - ly * 0.7 + z * 0.6) * (0.7 + lr * 0.4) + n * 0.9 - (1 - inside) * 0.15
+        const v = Math.max(0, Math.min(3, (light + 0.35) * 2.6 + (b - 0.5) * 0.9))
+        px[y * S + x] = toABGR(cols[Math.floor(v)])
       }
     list.push(toSprite(px, S, S, S >> 1, S >> 1))
   }
