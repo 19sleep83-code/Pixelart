@@ -53,7 +53,9 @@ func setup(m: GameMap) -> void:
 	_bake_marks()
 
 
-func _exit_tree() -> void:
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
 	for r in _shadow_items + _mark_items:
 		RenderingServer.free_rid(r)
 	_shadow_items.clear()

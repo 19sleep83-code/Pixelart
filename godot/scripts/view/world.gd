@@ -94,6 +94,7 @@ var _lap_t := 0
 
 var _shake := 0.0
 var _layers: Array[RID] = []
+var _layers_extra: Array[RID] = []
 var _holder: Node2D
 var _sv: SubViewport
 var _root: Node2D
@@ -107,8 +108,11 @@ var _tile_lamps: Array = []  # per tile: null or PackedVector2Array of window li
 var _ore_frame := PackedInt32Array()
 var _fog_img: Image
 var _fog_tex: ImageTexture
-var _fog_bytes := PackedByteArray()
+var _fog_alpha := PackedByteArray()
 var _ufac: Array[String] = []
+# the units and buildings near the view
+var _ve: Array[Ent] = []
+var _ve_near := PackedByteArray()
 # the sorted list
 var _keys := PackedInt64Array()
 var _ik := PackedInt32Array()
@@ -122,6 +126,15 @@ var _fq := PackedVector2Array()
 # lights
 var _lx := PackedFloat32Array()
 var _lc := PackedColorArray()
+
+## the fog image holds the darkness of each tile, smoothly filtered, in the fog's colour
+const FOG_SHADER := """
+shader_type canvas_item;
+uniform sampler2D fog : filter_linear, repeat_disable;
+void fragment() {
+	COLOR = vec4(11.0 / 255.0, 13.0 / 255.0, 10.0 / 255.0, texture(fog, UV).r);
+}
+"""
 
 enum { L_SHADOW, L_OBJ, L_AIR_ADD, L_CLOUD, L_LOW, L_GRADE, L_LIGHT, L_SHOT, L_HIGH, L_HIGH_ADD, L_RAIN, L_BARS, L_FOG, L_OVER, L_COUNT }
 
@@ -154,7 +167,10 @@ func setup(g: Game) -> void:
 	# the dark beyond the edges of the map
 	var bg := Node2D.new()
 	_root.add_child(bg)
-	RenderingServer.canvas_item_add_rect(bg.get_canvas_item(), Rect2(-N * 32.0 - 6000, -6000, N * 64.0 + 12000, N * 32.0 + 12000), K_141A12)
+	var bgi := RenderingServer.canvas_item_create()
+	RenderingServer.canvas_item_set_parent(bgi, bg.get_canvas_item())
+	RenderingServer.canvas_item_add_rect(bgi, Rect2(-N * 32.0 - 6000, -6000, N * 64.0 + 12000, N * 32.0 + 12000), K_141A12)
+	_layers_extra.append(bgi)
 	terrain = Terrain.new()
 	_root.add_child(terrain)
 	terrain.setup(g.map)
@@ -212,9 +228,16 @@ func setup(g: Game) -> void:
 			Art.unit(p.faction, key)
 		for key in ["hq"] + Data.BUILD_ORDER:
 			Art.building(p.faction, key)
-	_fog_img = Image.create(N, N, false, Image.FORMAT_RGBA8)
-	_fog_bytes.resize(N * N * 4)
+	_fog_img = Image.create(N, N, false, Image.FORMAT_R8)
+	_fog_alpha.resize(N * N)
 	_fog_tex = ImageTexture.create_from_image(_fog_img)
+	var fog_sh := Shader.new()
+	fog_sh.code = FOG_SHADER
+	var fog_mat := ShaderMaterial.new()
+	fog_mat.shader = fog_sh
+	fog_mat.set_shader_parameter("fog", _fog_tex)
+	_mats.append(fog_mat)
+	RenderingServer.canvas_item_set_material(_layers[L_FOG], fog_mat.get_rid())
 	g.fog_dirty = true
 	camera = Camera2D.new()
 	_root.add_child(camera)
@@ -258,10 +281,13 @@ func _resize() -> void:
 	_pic.size = Vector2(_sv.size) * zoom
 
 
-func _exit_tree() -> void:
-	for r in _layers:
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
+	for r in _layers + _layers_extra:
 		RenderingServer.free_rid(r)
 	_layers.clear()
+	_layers_extra.clear()
 
 
 func _process(delta: float) -> void:
@@ -531,6 +557,7 @@ func redraw(dt := 1.0 / 60.0) -> void:
 	atmos.water(g.time)
 	_lap("")
 
+	_gather_ents()
 	_draw_shadows()
 	_lap("_draw_shadows")
 	_draw_objects(X0, X1, Y0, Y1, ty0, ty1)
@@ -541,10 +568,9 @@ func redraw(dt := 1.0 / 60.0) -> void:
 	atmos.clouds(cl, _view, g.time)
 	# selected buildings get corner brackets on top
 	var hov: Variant = overlay.get("hover_ent")
-	for e in g.ents:
-		if not e.is_b or e.dead or (not e.selected and hov != e) or not _on_screen(e.x, e.y):
-			continue
-		if e.owner != 0 and not shown(e):
+	for j in _ve.size():
+		var e := _ve[j]
+		if not e.is_b or (not e.selected and hov != e) or not _ve_near[j]:
 			continue
 		_footprint(cl, e.tx, e.ty, e.w, e.h, C_SEL if e.owner == 0 else C_FOE, 0.9 if e.selected else 0.5)
 
@@ -589,12 +615,35 @@ func _tile_span(ty: int, X0: float, X1: float, Y0: float, Y1: float) -> Vector2i
 	return Vector2i(a, b)
 
 
+## what is drawn of the units and buildings: shown to the player and near the view (`_ve_near`: within
+## the narrower margin most passes use)
+func _gather_ents() -> void:
+	_ve.clear()
+	_ve_near.clear()
+	var m := 90 * P
+	var m0 := 60 * P
+	var vx := _view.position.x
+	var vy := _view.position.y
+	var W := _view.size.x
+	var H := _view.size.y
+	for e in game.ents:
+		if e.dead:
+			continue
+		var sx := (e.x - e.y) * 32.0 - vx
+		var sy := (e.x + e.y) * 16.0 - vy
+		if not (sx > -m and sx < W + m and sy > -m and sy < H + m * 1.5) or not shown(e):
+			continue
+		_ve.append(e)
+		_ve_near.append(1 if sx > -m0 and sx < W + m0 and sy > -m0 and sy < H + m0 * 1.5 else 0)
+
+
 func _draw_shadows() -> void:
 	var g := game
 	var ci := _layers[L_SHADOW]
-	for e in g.ents:
-		if e.dead or not _on_screen(e.x, e.y) or not shown(e):
+	for j in _ve.size():
+		if not _ve_near[j]:
 			continue
+		var e := _ve[j]
 		var f := _ufac[e.owner]
 		if e.is_b:
 			if e.built < 1:
@@ -617,13 +666,12 @@ func _draw_shadows() -> void:
 				shs.draw(ci, shs.dir(e.dir), s.x, s.y)
 	# markers on the ground: selection rings
 	var hov: Variant = overlay.get("hover_ent")
-	for e in g.ents:
-		if e.dead or e.carried_by != null or e.inside != null or e.is_b or not _on_screen(e.x, e.y):
+	for j in _ve.size():
+		var e := _ve[j]
+		if e.is_b or not _ve_near[j]:
 			continue
 		var hover: bool = hov == e
 		if not e.selected and not hover:
-			continue
-		if e.owner != 0 and not shown(e):
 			continue
 		var col := (C_SEL if e.selected else C_HOVER) if e.owner == 0 else C_FOE
 		var s := _scr(e.x, e.y)
@@ -672,9 +720,7 @@ func _draw_objects(X0: float, X1: float, Y0: float, Y1: float, ty0: int, ty1: in
 		if art.wreck == null:
 			continue
 		_push(w.x + w.y, 1, w, 0, Vector2.ZERO)
-	for e in g.ents:
-		if e.dead or not _on_screen(e.x, e.y, 90 * P) or not shown(e):
-			continue
+	for e in _ve:
 		if e.air and e.z > 3:
 			_air.append(e)
 			continue
@@ -939,9 +985,10 @@ func _draw_lights(X0: float, X1: float, Y0: float, Y1: float, ty0: int, ty1: int
 	_lc.clear()
 	if level > 0:
 		var blink := int(floorf(g.time * 1.5)) % 2 == 0
-		for e in g.ents:
-			if e.dead or e.carried_by != null or e.inside != null or not _on_screen(e.x, e.y) or not shown(e):
+		for j in _ve.size():
+			if not _ve_near[j]:
 				continue
+			var e := _ve[j]
 			if e.is_b:
 				if e.built < 1:
 					continue
@@ -1094,11 +1141,12 @@ func _draw_bars() -> void:
 	var g := game
 	var ci := _layers[L_BARS]
 	var hov: Variant = overlay.get("hover_ent")
-	for e in g.ents:
-		if e.dead or e.carried_by != null or e.inside != null or not _on_screen(e.x, e.y):
+	for j in _ve.size():
+		if not _ve_near[j]:
 			continue
+		var e := _ve[j]
 		var show: bool = e.selected or hov == e or (e.hp < e.max_hp and g.time - e.last_hit < 3)
-		if not show or not shown(e):
+		if not show:
 			continue
 		var k := maxf(0.0, e.hp / e.max_hp)
 		var w := 0.0
@@ -1224,15 +1272,14 @@ func _draw_fog() -> void:
 	var g := game
 	var N := g.map.N
 	if g.fog_dirty:
-		var b := _fog_bytes
+		# how dark each tile is: in sight clear, seen alpha 120, never seen 255 (one byte per tile,
+		# blended between tiles by the GPU, coloured by the shader)
+		var fb := _fog_alpha
+		var fog := g.fog
 		for i in N * N:
-			var f := g.fog[i]
-			var j := i * 4
-			b[j] = 11
-			b[j + 1] = 13
-			b[j + 2] = 10
-			b[j + 3] = 0 if f == 2 else (120 if f == 1 else 255)
-		_fog_img.set_data(N, N, false, Image.FORMAT_RGBA8, b)
+			var f := fog[i]
+			fb[i] = 0 if f == 2 else (120 if f == 1 else 255)
+		_fog_img.set_data(N, N, false, Image.FORMAT_R8, fb)
 		_fog_tex.update(_fog_img)
 		g.fog_dirty = false
 	var ci := _layers[L_FOG]
@@ -1280,8 +1327,9 @@ func _draw_overlay() -> void:
 	var bx: Variant = overlay.get("box")
 	if bx is Rect2:
 		var r: Rect2 = bx.abs()
-		var p0 := screen_to_px(r.position).round()
-		var p1 := screen_to_px(r.end).round()
+		# on the screen: it does not shake with the view
+		var p0 := (screen_to_px(r.position) + camera.offset).round()
+		var p1 := (screen_to_px(r.end) + camera.offset).round()
 		var w := p1.x - p0.x
 		var h := p1.y - p0.y
 		_rect(ci, p0.x, p0.y, w, h, Color(120 / 255.0, 1, 110 / 255.0, 0.12))

@@ -75,6 +75,8 @@ func run(args: PackedStringArray) -> void:
 	_report("end")
 	var lost := [game.players[0].stats.lost, game.players[1].stats.lost]
 	print("units lost: ", lost, "  built: ", [game.players[0].stats.built, game.players[1].stats.built])
+	world.queue_free()
+	game.dispose()
 
 
 func _make(opts: Dictionary, zl: int) -> void:

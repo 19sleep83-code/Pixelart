@@ -203,6 +203,24 @@ func scene_arty() -> void:
 	world.set_zoom_level(2)
 	world.look_at_tile(tanks[0].x - 0.5, tanks[0].y + 0.3)
 	await _shot("c_arty")
+	# shells and rockets on their way
+	for i in 30 * 20:
+		game.update(STEP)
+		var flying := 0
+		var at := Vector3.ZERO
+		for sh in game.shots:
+			if (sh.kind == "art" or sh.kind == "mlrs") and sh.t / sh.T > 0.35 and sh.t / sh.T < 0.6:
+				flying += 1
+				at = game.shot_pos(sh)
+		if flying >= 2:
+			world.set_zoom_level(2)
+			world.camera.position = world.tile_to_px(at.x, at.y, at.z).round() + Vector2(0, 120)
+			world.clamp_camera()
+			break
+	for sh in game.shots:
+		var q := game.shot_pos(sh)
+		print("  shot %s at screen %s" % [sh.kind, world.px_to_screen(world.tile_to_px(q.x, q.y, q.z)).round()])
+	await _shot("c2_arty_flight")
 
 
 # ─────────────────────────────────────────────────────────────── (d) a naval battle
