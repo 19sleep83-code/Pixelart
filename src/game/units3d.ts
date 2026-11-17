@@ -136,6 +136,147 @@ function plate(m: Vox, x: number, y: number, z: number, along = true) {
     }
 }
 
+// ─────────────────────────────────────────────────────────── small parts
+
+const ROPE = hex('6e6656')
+const WOOD = hex('6a4a2a')
+const CANVAS = hex('6b6a4c')
+const TAIL = hex('d03a28')
+const AMBER = hex('ffb43a')
+
+/** a crewman looking out of an open hatch: shoulders, face, helmet with headset, the lid open behind */
+function crew(m: Vox, x: number, y: number, z: number, f: Faction, lid: number) {
+  const s = SCHEMES[f]
+  const uni = shade(s.uniform, 1.15)
+  m.box(x - 0.5, y - 0.5, z - 0.5, x + 1.5, y + 1.5, z - 0.5, GUN) // the hatch ring
+  m.box(x, y - 1, z, x + 1, y - 1, z + 1.5, lid) // the lid, standing open behind
+  m.box(x, y, z, x + 1, y + 1, z + 0.5, uni) // shoulders
+  m.box(x + 0.5, y + 0.5, z + 1.5, x + 0.5, y + 0.5, z + 1.5, COL.skin) // the face
+  m.box(x + 0.5, y + 0.5, z + 2.5, x + 0.5, y + 0.5, z + 2.5, s.helmet) // helmet
+  m.box(x + 0.5, y + 0.5, z + 2, x + 0.5, y + 0.5, z + 2, s.helmet) // the back of it
+  m.dot(x + 0.5, y + 1.25, z + 2, COL.skin)
+  m.dot(x + 1, y + 1.25, z + 2, COL.skin)
+  m.dot(x + 0.25, y + 1, z + 2, GUN) // headset
+  m.dot(x + 1.25, y + 1, z + 2, GUN)
+}
+
+/** a jerrycan standing on its end */
+function jerrycan(m: Vox, x: number, y: number, z: number, c = hex('4a5634')) {
+  m.box(x, y, z, x + 0.5, y + 0.5, z + 1, c)
+  m.dot(x + 0.5, y + 0.5, z + 1.5, shade(c, 0.7))
+  m.dot(x + 0.75, y + 0.5, z + 1.5, shade(c, 0.7))
+}
+
+/** a shovel (and an axe beside it) strapped along y */
+function tools(m: Vox, x: number, y: number, z: number, len = 4) {
+  m.rod(x + 0.25, y, z + 0.25, x + 0.25, y + len, z + 0.25, WOOD)
+  m.box(x, y + len, z, x + 0.5, y + len + 0.5, z, GUN_HI)
+  m.rod(x + 0.75, y + 0.5, z + 0.25, x + 0.75, y + len - 1, z + 0.25, WOOD)
+  m.box(x + 0.75, y + len - 1, z, x + 1, y + len - 0.5, z + 0.25, GUN)
+}
+
+/** a braided tow cable along y */
+function cable(m: Vox, x: number, y0: number, y1: number, z: number) {
+  for (let y = y0; y <= y1; y += 0.5) m.dot(x + 0.25, y, z + (Math.round(y * 2) % 2 ? 0.25 : 0), Math.round(y * 2) % 3 ? ROPE : shade(ROPE, 0.75))
+  m.box(x, y0 - 0.5, z, x + 0.5, y0, z + 0.5, GUN) // the eyes
+  m.box(x, y1, z, x + 0.5, y1 + 0.5, z + 0.5, GUN)
+}
+
+/** spare track links in a row along x */
+function spareLinks(m: Vox, x0: number, x1: number, y: number, z: number, s: Scheme) {
+  for (let x = x0; x <= x1; x += 1) {
+    m.box(x, y, z, x + 0.5, y + 1, z, s.track)
+    m.dot(x + 0.25, y + 0.5, z + 0.5, shade(s.track, 1.4))
+  }
+}
+
+/** an engine grille: fine bars across */
+function grille(m: Vox, x0: number, x1: number, y0: number, y1: number, z: number, c: number) {
+  for (let y = y0; y <= y1; y += 1) m.box(x0, y, z, x1, y, z, y % 2 ? shade(c, 0.6) : shade(c, 0.85))
+}
+
+/** a stowage box with its lid edge and latches */
+function stowBox(m: Vox, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number) {
+  m.box(x0, y0, z0, x1, y1, z1, c)
+  m.box(x0, y0, z1, x1, y1, z1, shade(c, 1.12))
+  for (let x = x0 + 0.5; x < x1; x += 2) m.dot(x, y1 + 0.75, z1 - 0.25, GUN)
+}
+
+/** red lamps at the back */
+function tailLights(m: Vox, xs: number[], y: number, z: number) {
+  for (const x of xs) m.dot(x + 0.25, y, z + 0.25, TAIL, true)
+}
+
+/** a rolled camouflage net or tarp across x */
+function roll(m: Vox, x0: number, x1: number, y: number, z: number) {
+  m.cylX(y + 0.75, z + 0.75, 0.8, x0, x1, CANVAS)
+  for (let x = x0 + 1; x < x1; x += 3) m.box(x, y, z, x, y + 1.5, z + 1.5, hex('3a3a2c'))
+}
+
+/** a rear-view mirror on its arm */
+function mirror(m: Vox, x: number, y: number, z: number) {
+  m.rod(x, y, z, x + (x < m.w / 2 ? -0.5 : 0.5), y + 0.5, z + 0.5, GUN)
+  m.box(x + (x < m.w / 2 ? -1 : 0.5), y + 0.5, z + 0.5, x + (x < m.w / 2 ? -0.5 : 1), y + 0.5, z + 1.5, GUN_HI)
+}
+
+const NAV_RED = hex('ff4a3a'), NAV_GREEN = hex('5aff7a'), NAV_WHITE = hex('fff8e0')
+
+/** a pilot's helmet showing through the canopy */
+function pilot(m: Vox, x: number, y: number, z: number, c = hex('d8d6c8')) {
+  m.dot(x, y, z, c)
+  m.dot(x + 0.5, y, z, c)
+  m.dot(x, y + 0.5, z, shade(c, 0.8))
+  m.dot(x + 0.5, y + 0.5, z, hex('2a2c28')) // the visor
+}
+
+/** a sailor on deck, about to scale with the ship */
+function sailor(m: Vox, x: number, y: number, z: number, shirt = hex('5a7aa8')) {
+  m.box(x, y, z, x, y, z + 1, hex('2a3040'))
+  m.box(x, y, z + 2, x, y, z + 2.5, shirt)
+  m.dot(x + 0.25, y + 0.25, z + 3.5, COL.skin)
+  m.dot(x + 0.25, y + 0.25, z + 4, COL.white)
+}
+
+/** port red, starboard green, a white light at the top or the stern */
+function navLights(m: Vox, xl: number, xr: number, y: number, z: number) {
+  m.dot(xl, y, z, NAV_RED, true)
+  m.dot(xr, y, z, NAV_GREEN, true)
+}
+
+/** a close-in weapon system: the white dome on its base */
+function ciws(m: Vox, x: number, y: number, z: number) {
+  m.box(x, y, z, x + 1, y + 1, z, hex('a8aca8'))
+  m.cylZ(x + 1, y + 1, 0.9, z + 1, z + 2, COL.white)
+  m.dot(x + 1, y + 1, z + 3, COL.white)
+  m.rod(x + 1, y + 1.5, z + 1, x + 1, y + 3, z + 1, GUN)
+}
+
+/** a satellite or fire-control dome */
+function dome(m: Vox, x: number, y: number, z: number, r = 1) {
+  m.rod(x, y, z, x, y, z + 1, GUN)
+  m.ball(x, y, z + 1 + r * 0.8, r, r, r * 0.9, COL.white)
+}
+
+/** a rigid inflatable boat in its davits */
+function rhib(m: Vox, x: number, y: number, z: number) {
+  m.box(x, y, z, x + 1, y + 3, z + 0.5, hex('3a3c38'))
+  m.box(x, y + 3.5, z, x + 1, y + 3.5, z + 0.5, hex('e07a2a'))
+  m.box(x + 0.5, y + 1, z + 1, x + 0.5, y + 2, z + 1, hex('d8d6c8'))
+  m.rod(x + 0.5, y, z + 0.5, x + 0.5, y, z + 2.5, GUN_HI)
+  m.rod(x + 0.5, y + 3.5, z + 0.5, x + 0.5, y + 3.5, z + 2.5, GUN_HI)
+}
+
+/** bollards and a winch on the foredeck */
+function foredeck(m: Vox, cx: number, y: number, z: number) {
+  m.cylX(y, z + 0.75, 0.75, cx - 1.5, cx + 1.5, GUN) // the windlass
+  for (const dx of [-3, 3]) {
+    m.box(cx + dx, y + 2, z, cx + dx, y + 2, z + 0.5, GUN_HI)
+    m.box(cx + dx, y + 3, z, cx + dx, y + 3, z + 0.5, GUN_HI)
+  }
+  m.rod(cx - 0.75, y, z + 0.5, cx - 2.5, y + 4, z - 0.5, hex('3a3c3a')) // the anchor chains
+  m.rod(cx + 0.75, y, z + 0.5, cx + 2.5, y + 4, z - 0.5, hex('3a3c3a'))
+}
+
 // ─────────────────────────────────────────────────────────── soldiers
 
 type Kit = 'rifle' | 'at' | 'sniper' | 'engineer' | 'mortar' | 'medic'
@@ -171,6 +312,11 @@ function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
   // backpack
   m.box(4, 2, 7, 6, 3, 10, nato ? hex('454b31') : hex('56583a'))
   m.box(4, 2, 11, 6, 2, 11, nato ? hex('3a3f29') : hex('4b4d32'))
+  // magazine pouches on the belt, a canteen and a knife at the hips
+  for (const x of [3.5, 4.5, 5.5, 6.5]) m.dot(x, 7, 6.5, shade(vest, 0.75))
+  m.box(8, 4.5, 5.5, 8, 5, 6, nato ? hex('3a3f29') : hex('4b4d32'))
+  m.dot(8.25, 4.75, 6.5, GUN)
+  m.dot(2.5, 5, 5.5, GUN)
   // team colour on the shoulders
   m.set(2, 5, 10, s.team)
   m.set(8, 5, 10, s.team)
@@ -194,8 +340,19 @@ function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
     m.box(2, 4 - step, 7, 2, 5 - step, 10, uni)
     m.box(8, 4 + step, 7, 8, 5 + step, 10, uni)
   }
+  const glove = hex('2a2824')
+  if (aim) {
+    m.dot(2.5, 8.5, 9.5, glove)
+    m.dot(8.5, 7.5, 9.5, glove)
+  } else {
+    m.dot(2.5, 5.5 - step, 7, glove)
+    m.dot(8.5, 5.5 + step, 7, glove)
+  }
   const wy = aim ? 6 : 6
   if (kit === 'rifle') {
+    // the section's radio on the pack, its whip antenna
+    m.box(4.5, 1.5, 11.5, 5.5, 2, 12.5, GUN)
+    m.rod(5.25, 1.75, 13, 5, 1, 17, GUN)
     // G36 with its carrying handle, or an AK with a curved magazine
     m.box(7, wy, armZ, 7, wy + 5, armZ, GUN)
     if (nato) {
@@ -251,7 +408,9 @@ function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
     m.cylX(2.25, 9, 0.9, 3, 3, hex('8a4a2c'))
     m.box(3, 3, 12, 7, 3, 12, COL.hazard) // a stripe on the helmet
   } else if (kit === 'at') {
-    // the launcher on the shoulder
+    // a spare round on the pack, the launcher on the shoulder
+    m.rod(3.5, 1.5, 7, 3.5, 1.5, 13, nato ? hex('6a7448') : hex('5d6a3c'))
+    m.dot(3.5, 1.5, 13.5, nato ? hex('6a7448') : hex('5d6a3c'))
     const z = 11
     if (nato) {
       // Panzerfaust 3: a fat tube with a big round warhead
@@ -269,6 +428,9 @@ function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
     // a long rifle with a scope, and a ghillie cape of leaves
     m.box(7, wy - 1, armZ, 7, wy + 7, armZ, nato ? GUN : hex('5a4030'))
     m.box(7, wy + 1, armZ + 1, 7, wy + 3, armZ + 1, GUN_HI)
+    m.dot(7.25, wy + 3.5, armZ + 1.5, COL.window) // the scope's lens
+    m.rod(7.25, wy + 6, armZ, 6.5, wy + 6.5, armZ - 1.5, GUN) // bipod
+    m.rod(7.75, wy + 6, armZ, 8.5, wy + 6.5, armZ - 1.5, GUN)
     m.paint((x, y, z, c) => {
       if (z < 6 || z > 14 || c === COL.skin || c === GUN || c === GUN_HI) return c
       const h = hash3(x, y, z)
@@ -320,8 +482,11 @@ function leopard(phase: number): Vox {
   m.set(3, 30, 4, LIGHT, true)
   m.set(13, 30, 4, LIGHT, true)
   // tow cables and tools on the skirts
-  m.box(1, 6, 6, 1, 22, 6, GUN)
-  m.box(15, 6, 6, 15, 22, 6, GUN)
+  cable(m, 1, 6, 22, 6)
+  cable(m, 15, 6, 22, 6)
+  tools(m, 12, 17, 7, 5)
+  tailLights(m, [3, 13], 0, 4)
+  m.box(5, 0, 3, 11, 0, 4, GUN_HI) // the towing pintle and plate
   m.box(2, 3, 5, 2, 5, 6, s.team)
   m.box(14, 3, 5, 14, 5, 6, s.team)
   plate(m, 1, 12, 4)
@@ -332,7 +497,7 @@ function leopard(phase: number): Vox {
 
 function leopardTurret(): Vox {
   const s = SCHEMES.nato
-  const m = new Vox(15, 36, 8)
+  const m = new Vox(15, 36, 10)
   // the box of the turret
   m.box(1, 0, 0, 13, 12, 4, s.base)
   // the wedge armour: an arrow head in front
@@ -346,9 +511,14 @@ function leopardTurret(): Vox {
   // commander's PERI sight, hatches, loader's MG
   m.box(3, 7, 5, 4, 8, 7, GUN)
   m.box(3, 8, 7, 4, 8, 7, s.glass)
-  hatch(m, 3, 4, 5, s.base)
+  crew(m, 3, 4, 6, 'nato', s.base)
   hatch(m, 9, 4, 5, s.base)
   m.box(10, 6, 5, 10, 9, 5, GUN)
+  m.rod(10.5, 9, 5.75, 10.5, 12, 5.75, GUN) // the loader's MG3
+  m.box(11, 6, 5, 11.5, 7, 5.5, hex('4a5634')) // its ammunition box
+  roll(m, 6, 12, 1, 5) // a tarp on the bustle
+  m.box(1, 1, 4, 2, 2, 5, CANVAS) // kit bags in the basket
+  m.box(11, 1, 4, 13, 2, 5, hex('4a5634'))
   m.box(11, 9, 5, 11, 10, 6, GUN) // gunner's sight
   smokeCups(m, 0, 9, 3, 1, GUN)
   smokeCups(m, 14, 9, 3, 1, GUN)
@@ -386,6 +556,10 @@ function t90(phase: number): Vox {
   m.box(2, 6, 5, 2, 16, 5, GUN)
   m.set(3, 29, 4, LIGHT, true)
   m.set(13, 29, 4, LIGHT, true)
+  cable(m, 14, 9, 20, 6)
+  tools(m, 2, 9, 6, 4)
+  stowBox(m, 12, 4, 6, 14, 7, 6.5, shade(s.base, 0.92))
+  tailLights(m, [3, 13], 0, 4)
   m.box(2, 3, 4, 2, 5, 5, s.team)
   m.box(14, 3, 4, 14, 5, 5, s.team)
   plate(m, 15, 10, 4)
@@ -396,7 +570,7 @@ function t90(phase: number): Vox {
 
 function t90Turret(): Vox {
   const s = SCHEMES.ru
-  const m = new Vox(15, 34, 8)
+  const m = new Vox(15, 34, 10)
   m.ball(7, 7, 0.5, 6.6, 6.8, 4, s.base)
   m.box(0, 0, -1, 14, 14, -1, -1)
   // a V of reactive armour on the front
@@ -411,7 +585,10 @@ function t90Turret(): Vox {
   m.set(11, 14, 3, RED_LAMP, true)
   // commander's cupola with the remote MG, hatches
   m.cylZ(4.5, 5, 1.8, 4, 4, s.dark)
-  m.box(5, 5, 5, 5, 9, 5, GUN)
+  crew(m, 3.5, 4, 5, 'ru', s.dark)
+  m.box(6.5, 5, 5, 7, 6.5, 5.5, GUN) // the remote Kord MG
+  m.rod(6.75, 6.5, 5.75, 6.75, 10, 5.75, GUN)
+  stowBox(m, 3, 0.5, 1, 11, 1.5, 3, shade(s.base, 0.9)) // the big box on the back
   hatch(m, 9, 4, 4, s.base)
   smokeCups(m, 1, 6, 2, 2, GUN)
   smokeCups(m, 12, 6, 2, 2, GUN)
@@ -433,7 +610,7 @@ function t90Turret(): Vox {
 /** Marder 1A5: a tall box, a small offset turret with the 20 mm cannon and a MILAN launcher */
 function marder(phase: number): Vox {
   const s = SCHEMES.nato
-  const m = new Vox(16, 29, 10)
+  const m = new Vox(16, 29, 13)
   tracks(m, s, { x0: 1, x1: 14, tw: 3, y0: 1, y1: 27, h: 4, wheels: 6, phase, skirt: 2 })
   m.box(2, 0, 3, 13, 28, 8, s.base)
   slope(m, 21, 8, 28, 3)
@@ -451,6 +628,12 @@ function marder(phase: number): Vox {
   m.box(13, 2, 7, 13, 4, 8, s.team)
   plate(m, 1, 9, 5)
   antenna(m, 3, 2, 9, 0)
+  crew(m, 9, 4, 9, 'nato', s.base) // a grenadier looking out of the roof hatch
+  tools(m, 4, 12, 9, 5)
+  cable(m, 13, 9, 19, 9)
+  jerrycan(m, 3, 0.5, 9)
+  jerrycan(m, 4, 0.5, 9)
+  tailLights(m, [3, 12], 0, 5)
   camo(m, s, 'nato', 31)
   m.py = 14
   return m
@@ -458,16 +641,17 @@ function marder(phase: number): Vox {
 
 function marderTurret(): Vox {
   const s = SCHEMES.nato
-  const m = new Vox(10, 20, 6)
+  const m = new Vox(10, 20, 10)
   m.box(1, 1, 0, 8, 8, 3, s.base)
   m.box(1, 8, 3, 8, 8, 3, -1)
   m.box(4, 8, 1, 5, 9, 2, GUN)
   m.rod(4.5, 9, 2.5, 4.5, 19, 2.5, GUN) // 20 mm cannon
   m.box(9, 3, 3, 9, 9, 4, hex('5d6845')) // MILAN on the side
   m.set(9, 10, 4, hex('6a7448'))
-  hatch(m, 2, 3, 4, s.base)
+  crew(m, 2, 3, 5, 'nato', s.base)
   smokeCups(m, 0, 6, 2, 1, GUN)
   m.box(1, 4, 1, 1, 6, 2, s.team)
+  m.box(6, 1, 4, 7, 2, 4.5, GUN) // the periscope head
   camo(m, s, 'nato', 32)
   m.px = 4.5
   m.py = 4.5
@@ -477,7 +661,7 @@ function marderTurret(): Vox {
 /** BMP-2: low and long with a ribbed, sharply sloped nose; the turret in the middle with a long 30 mm gun and a Konkurs launcher */
 function bmp(phase: number): Vox {
   const s = SCHEMES.ru
-  const m = new Vox(16, 28, 8)
+  const m = new Vox(16, 28, 11)
   tracks(m, s, { x0: 1, x1: 14, tw: 3, y0: 1, y1: 26, h: 4, wheels: 6, phase })
   m.box(2, 0, 3, 13, 27, 6, s.base)
   slope(m, 13, 6, 27, 3)
@@ -494,6 +678,10 @@ function bmp(phase: number): Vox {
   m.box(2, 12, 5, 2, 14, 6, s.team)
   m.box(13, 12, 5, 13, 14, 6, s.team)
   plate(m, 1, 8, 4)
+  crew(m, 11, 6, 7, 'ru', s.base)
+  tools(m, 7, 2, 7, 5)
+  cable(m, 2, 2, 10, 7)
+  tailLights(m, [3, 12], 0, 4)
   camo(m, s, 'ru', 33)
   m.py = 13
   return m
@@ -501,7 +689,7 @@ function bmp(phase: number): Vox {
 
 function bmpTurret(): Vox {
   const s = SCHEMES.ru
-  const m = new Vox(10, 22, 7)
+  const m = new Vox(10, 22, 9)
   m.ball(5, 5, 0.4, 4.4, 4.4, 3, s.base)
   m.box(0, 0, -1, 9, 9, -1, -1)
   m.box(4, 8, 1, 5, 9, 2, GUN)
@@ -512,6 +700,7 @@ function bmpTurret(): Vox {
   smokeCups(m, 0, 4, 1, 2, GUN)
   smokeCups(m, 8, 4, 1, 2, GUN)
   m.box(0, 5, 1, 0, 6, 1, s.team)
+  crew(m, 6, 4.5, 4, 'ru', s.base)
   camo(m, s, 'ru', 34)
   m.px = 5
   m.py = 5
@@ -538,6 +727,14 @@ function fennek(): Vox {
   m.set(10, 22, 3, LIGHT, true)
   m.box(1, 2, 5, 2, 3, 5, s.team)
   antenna(m, 9, 4, 8, 3)
+  stowBox(m, 3, 9, 8, 5, 12, 8, shade(s.base, 0.9)) // roof rack
+  roll(m, 7, 10, 10, 8)
+  jerrycan(m, 2, 1, 6)
+  jerrycan(m, 9, 1, 6)
+  mirror(m, 1, 15, 6)
+  mirror(m, 11, 15, 6)
+  tailLights(m, [1.5, 10], 1, 3)
+  m.cylY(6, 4, 1.6, 0.5, 1, RUBBER) // the spare wheel on the back
   camo(m, s, 'nato', 71)
   m.py = 11.5
   return m
@@ -546,6 +743,8 @@ function fennekTurret(): Vox {
   const m = new Vox(5, 10, 3)
   m.box(1, 0, 0, 3, 3, 1, GUN)
   m.rod(2.5, 3, 1.5, 2.5, 9, 1.5, GUN)
+  m.box(3.5, 1, 0.5, 4, 2, 1.5, hex('4a5634')) // ammunition box
+  m.box(0.5, 0.5, 1.5, 1, 1, 2, COL.window, true) // the sight's glass
   m.px = 2.5
   m.py = 2
   return m
@@ -554,7 +753,7 @@ function fennekTurret(): Vox {
 /** BRDM-2: a boat-shaped body on four wheels, a small cone turret with a heavy MG */
 function brdm(): Vox {
   const s = SCHEMES.ru
-  const m = new Vox(13, 25, 9)
+  const m = new Vox(13, 25, 11)
   axle(m, 5, 13, 2, s)
   axle(m, 18, 13, 2, s)
   m.box(1, 1, 2, 11, 23, 6, s.base)
@@ -567,6 +766,10 @@ function brdm(): Vox {
   m.box(1, 9, 5, 1, 12, 5, s.team)
   m.box(11, 9, 5, 11, 12, 5, s.team)
   antenna(m, 2, 3, 7, 1)
+  crew(m, 7, 14, 7, 'ru', s.base)
+  tools(m, 0.5, 6, 4, 4)
+  tailLights(m, [1.5, 10.5], 0, 3)
+  m.box(4, 0, 4, 8, 0, 5, GUN_HI) // the engine grille at the back
   camo(m, s, 'ru', 72)
   m.py = 12
   return m
@@ -598,6 +801,9 @@ function gepard(phase: number): Vox {
   m.box(2, 3, 5, 2, 5, 6, s.team)
   m.box(13, 3, 5, 13, 5, 6, s.team)
   plate(m, 1, 12, 4)
+  cable(m, 2, 9, 22, 7)
+  tools(m, 12, 18, 7, 4)
+  tailLights(m, [3, 12], 0, 4)
   camo(m, s, 'nato', 51)
   m.py = 14.5
   return m
@@ -623,8 +829,9 @@ function gepardTurret(angle: number): Vox {
   const ca = Math.cos(angle), sa = Math.sin(angle)
   for (let k = -5; k <= 5; k++)
     for (let h = 0; h <= 2; h++) m.set(Math.round(9 + ca * k), Math.round(3 + sa * k), 11 + h, h === 1 ? GUN_HI : GUN)
-  hatch(m, 5, 6, 7, s.base)
+  crew(m, 5, 6, 8, 'nato', s.base)
   hatch(m, 12, 6, 7, s.base)
+  stowBox(m, 11, 2, 7, 13, 4, 7.5, shade(s.base, 0.9))
   m.box(4, 8, 2, 4, 10, 3, s.team)
   m.box(14, 8, 2, 14, 10, 3, s.team)
   camo(m, s, 'nato', 52)
@@ -647,6 +854,10 @@ function tunguska(phase: number): Vox {
   m.box(2, 3, 5, 2, 5, 6, s.team)
   m.box(13, 3, 5, 13, 5, 6, s.team)
   plate(m, 14, 12, 4)
+  cable(m, 2, 9, 21, 7)
+  tools(m, 12, 19, 7, 4)
+  tailLights(m, [3, 12], 0, 4)
+  m.box(5, 0, 4, 10, 0, 5, GUN_HI) // exhaust grille
   camo(m, s, 'ru', 53)
   m.py = 14.5
   return m
@@ -672,7 +883,7 @@ function tunguskaTurret(angle: number): Vox {
   const ca = Math.cos(angle), sa = Math.sin(angle)
   for (let k = -6; k <= 6; k++)
     for (let h = 0; h <= 1; h++) m.set(Math.round(10 + ca * k), Math.round(3 + sa * k), 10 + h + (Math.abs(k) > 4 ? 1 : 0), h ? GUN_HI : GUN)
-  hatch(m, 6, 6, 7, s.base)
+  crew(m, 6, 6, 8, 'ru', s.base)
   m.box(5, 7, 2, 5, 9, 3, s.team)
   m.box(15, 7, 2, 15, 9, 3, s.team)
   camo(m, s, 'ru', 54)
@@ -699,13 +910,17 @@ function pzh(phase: number): Vox {
   m.box(2, 2, 4, 2, 4, 5, s.team)
   m.box(14, 2, 4, 14, 4, 5, s.team)
   plate(m, 1, 18, 4)
+  tools(m, 11, 20, 6, 4)
+  jerrycan(m, 13, 25, 6)
+  cable(m, 2, 17, 25, 6)
+  tailLights(m, [3, 13], 0, 4)
   camo(m, s, 'nato', 41)
   m.py = 15.5
   return m
 }
 function pzhTurret(): Vox {
   const s = SCHEMES.nato
-  const m = new Vox(16, 42, 10)
+  const m = new Vox(16, 42, 13)
   m.box(1, 0, 0, 14, 16, 7, s.base)
   m.box(1, 16, 6, 14, 16, 7, -1)
   m.box(1, 0, 7, 2, 16, 7, -1)
@@ -717,9 +932,12 @@ function pzhTurret(): Vox {
   m.box(7, 38, 3, 8, 41, 4, GUN)
   m.box(7, 39, 3, 8, 39, 4, GUN_HI) // the baffles of the muzzle brake
   // hatches, MG ring, smoke cups, stowage boxes
-  hatch(m, 3, 4, 8, s.base)
+  crew(m, 3, 4, 9, 'nato', s.base)
   hatch(m, 10, 4, 8, s.base)
   m.box(3, 8, 8, 4, 9, 8, GUN)
+  m.rod(4, 9, 8.75, 4, 12, 8.75, GUN) // the MG on its ring
+  roll(m, 8, 13, 1, 8)
+  m.box(10, 9, 8, 13, 13, 8, GUN_HI) // the ammunition hatch
   smokeCups(m, 1, 15, 5, 3, GUN)
   smokeCups(m, 12, 15, 5, 3, GUN)
   m.box(0, 3, 1, 0, 12, 4, s.dark)
@@ -748,19 +966,25 @@ function msta(phase: number): Vox {
   m.box(2, 3, 4, 2, 5, 5, s.team)
   m.box(14, 3, 4, 14, 5, 5, s.team)
   plate(m, 15, 14, 4)
+  tools(m, 2, 20, 6, 4)
+  cable(m, 14, 16, 25, 6)
+  tailLights(m, [3, 13], 0, 4)
   camo(m, s, 'ru', 45)
   m.py = 15
   return m
 }
 function mstaTurret(): Vox {
   const s = SCHEMES.ru
-  const m = new Vox(16, 40, 10)
+  const m = new Vox(16, 40, 13)
   m.box(0, 0, 0, 15, 16, 6, s.base)
   m.box(0, 16, 6, 15, 16, 6, -1)
   m.box(0, 0, 6, 1, 16, 6, -1)
   m.box(14, 0, 6, 15, 16, 6, -1)
   m.box(2, 1, 7, 5, 4, 8, s.dark) // commander's cupola
+  crew(m, 2.5, 2, 9, 'ru', s.dark)
   m.box(11, 2, 7, 12, 6, 7, GUN) // remote MG
+  m.rod(11.5, 6, 7.75, 11.5, 9, 7.75, GUN)
+  stowBox(m, 6, 1, 7, 9, 4, 7.5, shade(s.base, 0.9))
   m.box(6, 16, 1, 9, 18, 5, s.dark)
   m.box(7.5, 18, 3.5, 7.5, 39, 3.5, GUN)
   m.box(7, 24, 3, 8, 26, 4, GUN) // fume extractor
@@ -779,7 +1003,7 @@ function mstaTurret(): Vox {
 /** MARS II: the Bradley chassis, a crew cab in front and two rocket pods at the back */
 function mars(phase: number): Vox {
   const s = SCHEMES.nato
-  const m = new Vox(17, 32, 12)
+  const m = new Vox(17, 32, 15)
   tracks(m, s, { x0: 1, x1: 15, tw: 3, y0: 1, y1: 30, h: 4, wheels: 6, phase, skirt: 2 })
   m.box(2, 0, 3, 14, 31, 4, s.base)
   m.box(2, 22, 5, 14, 31, 10, s.base) // the armoured cab
@@ -793,6 +1017,11 @@ function mars(phase: number): Vox {
   m.box(5, 24, 11, 11, 26, 11, s.team)
   antenna(m, 3, 23, 11, 0)
   plate(m, 1, 24, 6)
+  crew(m, 9, 23, 11, 'nato', s.base)
+  mirror(m, 2, 30, 8)
+  mirror(m, 14, 30, 8)
+  tools(m, 13, 15, 5, 4)
+  tailLights(m, [3, 13], 0, 3)
   camo(m, s, 'nato', 47)
   m.py = 15.5
   return m
@@ -805,6 +1034,12 @@ function marsTurret(): Vox {
   // the ends of the rocket tubes in two pods
   for (const x0 of [1, 9]) for (let x = x0; x <= x0 + 4; x += 2) for (let z = 1; z <= 5; z += 2) m.set(x, 17, z, s.track)
   m.box(0, 0, 7, 14, 2, 7, GUN)
+  for (let y = 3; y <= 15; y += 4) {
+    m.box(0, y, 0, 0, y, 6, shade(s.base, 0.85)) // the ribs of the pods
+    m.box(14, y, 0, 14, y, 6, shade(s.base, 0.85))
+  }
+  m.rod(3, 0, 7.5, 3, 15, 7.5, GUN_HI) // cable ducts on the roof
+  m.rod(11, 0, 7.5, 11, 15, 7.5, GUN_HI)
   m.box(0, 6, 3, 0, 10, 4, s.team)
   m.box(14, 6, 3, 14, 10, 4, s.team)
   camo(m, s, 'nato', 48)
@@ -832,6 +1067,15 @@ function grad(): Vox {
   m.set(11, 30, 4, LIGHT, true)
   m.box(2, 1, 4, 11, 19, 4, s.base)
   m.box(5, 23, 10, 8, 24, 10, s.team)
+  m.cylY(6.5, 6.5, 2, 20, 20.5, RUBBER) // the spare wheel behind the cab
+  m.cylY(6.5, 6.5, 0.8, 20, 21, GUN_HI)
+  m.cylY(1, 4.5, 1, 13, 18, shade(s.base, 0.8)) // fuel tank
+  stowBox(m, 11, 13, 4, 12, 18, 5, s.dark)
+  mirror(m, 1, 28, 7)
+  mirror(m, 12, 28, 7)
+  jerrycan(m, 2, 20, 4)
+  tailLights(m, [2, 11], 0, 3)
+  m.rod(11.5, 21, 5, 11.5, 21, 11, GUN) // exhaust
   camo(m, s, 'ru', 43)
   m.py = 15
   return m
@@ -843,6 +1087,7 @@ function gradTurret(): Vox {
   // forty tube ends: four rows of ten
   for (let x = 1; x <= 11; x++) for (let z = 0; z <= 6; z++) if (z % 2 === 1 || x % 2 === 0) m.set(x, 15, z, z % 2 === 1 && x % 2 === 1 ? s.track : shade(s.base, 0.75))
   m.box(5, 2, 0, 7, 4, 0, GUN)
+  for (let y = 2; y <= 13; y += 4) m.box(0.5, y, 0, 11.5, y, 0, GUN_HI) // the cradle's bands
   m.box(0, 4, 2, 0, 9, 3, s.team)
   m.box(12, 4, 2, 12, 9, 3, s.team)
   camo(m, s, 'ru', 44)
@@ -876,6 +1121,13 @@ function oreTruck(f: Faction, loaded: boolean): Vox {
   m.set(2, 28, 5, LIGHT, true)
   m.set(11, 28, 5, LIGHT, true)
   m.box(12, 20, 5, 12, 20, 12, GUN) // exhaust stack
+  m.dot(12.25, 20.25, 12.75, hex('1a1a18'))
+  m.box(6, 22, 13, 6.5, 22.5, 13.5, AMBER, true) // the warning beacon
+  mirror(m, 1, 27, 9)
+  mirror(m, 12, 27, 9)
+  m.cylY(1, 3, 1, 13, 18, GUN_HI) // fuel tank
+  m.box(0.5, 20, 3, 1, 21, 3, GUN) // the step up to the cab
+  tailLights(m, [1.5, 11.5], 0, 3)
   // the tipper body with ribs
   const body = shade(COL.hazard, 0.88)
   m.box(1, 1, 4, 12, 19, 4, body)
@@ -940,6 +1192,21 @@ function apache(): UnitModel {
   m.box(8, 12, 6, 8, 13, 6, s.team)
   m.box(11, 12, 6, 11, 13, 6, s.team)
   m.set(9, 4, 6, COL.white)
+  // the crew: gunner in front, pilot behind and higher
+  pilot(m, 9.5, 29.5, 7.5)
+  pilot(m, 9.5, 24.5, 8.5)
+  // TADS/PNVS sensor turret with its windows, wire cutters, exhaust suppressors
+  m.box(9, 33.5, 1.5, 10, 33.5, 2, COL.window, true)
+  m.rod(9.75, 31, 8, 9.75, 32.5, 7, GUN_HI)
+  m.rod(9.75, 32, 0.5, 9.75, 33, 1, GUN_HI)
+  for (const x of [6.5, 12.5]) m.box(x, 12, 7.5, x + 0.5, 13, 8, hex('2a2826'))
+  // Hellfire noses, rocket tube ends
+  for (const x of [2, 4, 15, 17]) m.dot(x + 0.25, 21.5, 3.75, hex('b8bcb0'))
+  for (const x of [6, 12]) for (let k = 0; k < 4; k++) m.dot(x + 0.25 + (k % 2) * 0.75, 21.5, 3.25 + (k >> 1) * 0.75, hex('1a1c1a'))
+  // position lights and the beacon
+  navLights(m, 2, 17.5, 18.5, 5.5)
+  m.dot(9.75, 0, 7, NAV_WHITE, true)
+  m.dot(9.75, 9, 7, NAV_RED, true)
   m.px = 9.5
   m.py = 18
   return { hull: m, rotor: { r: 20, z: 12, tail: 16 }, muzzle: [14, 2] }
@@ -979,6 +1246,22 @@ function hind(): UnitModel {
   m.paint((x, y, z, cc) => (cc === c && valueNoise(x, y + z, 4, 63) > 0.62 ? c2 : cc))
   m.box(8, 14, 9, 8, 16, 9, s.team)
   m.box(15, 14, 9, 15, 16, 9, s.team)
+  pilot(m, 11.5, 34, 7.5)
+  pilot(m, 11.5, 30.5, 10.5)
+  // Shturm missile rails at the wing tips, the IR jammer, exhaust soot, the sensor pod
+  m.rod(0.5, 16, 6.5, 0.5, 23, 6.5, GUN_HI)
+  m.rod(23, 16, 6.5, 23, 23, 6.5, GUN_HI)
+  m.box(11, 12, 12, 12, 13, 13, hex('3a3a36'))
+  m.dot(11.5, 12.5, 13.5, hex('ff7a3a'), true)
+  for (const x of [7.5, 15.5]) m.box(x, 14, 10, x + 0.5, 15, 11, hex('2a2826'))
+  m.box(12, 37, 1, 13, 37.5, 1.5, COL.window, true)
+  for (let k = 0; k < 4; k++) {
+    m.dot(0.5 + (k % 2), 23.5, 4.25 + (k >> 1) * 0.75, hex('1a1c1a'))
+    m.dot(21.5 + (k % 2), 23.5, 4.25 + (k >> 1) * 0.75, hex('1a1c1a'))
+  }
+  navLights(m, 0, 23.5, 20, 7)
+  m.dot(11.75, 0, 9, NAV_WHITE, true)
+  m.dot(11.75, 8, 9, NAV_RED, true)
   m.px = 11.5
   m.py = 20
   return { hull: m, rotor: { r: 22, z: 13, tail: 18 }, muzzle: [16, 2] }
@@ -1006,9 +1289,20 @@ function eurofighter(): Vox {
   for (let z = 4; z <= 8; z++) m.box(11, 2 + (z - 4), z, 12, 7 - Math.floor((z - 4) / 2), z, c)
   m.set(11, 5, 8, s.team)
   m.box(11, 0, 2, 12, 2, 3, GUN) // the nozzles
-  for (const x of [3, 6, 17, 20]) m.box(x, 9, 1, x, 12, 1, GUN_HI) // missiles
+  for (const x of [3, 6, 17, 20]) {
+    m.box(x, 9, 1, x, 12, 1, GUN_HI) // missiles
+    m.dot(x + 0.25, 13, 1.25, COL.white)
+    m.dot(x + 0.25, 9, 1.75, GUN) // fins
+  }
+  m.cylY(11.5, 1, 0.9, 12, 19, hex('a8aeb0')) // the centreline tank
   m.set(2, 6, 2, s.team)
   m.set(21, 6, 2, s.team)
+  pilot(m, 11.25, 23.5, 5.5)
+  m.rod(12.75, 26, 4, 12.75, 29, 4, GUN_HI) // the refuelling probe
+  m.dot(11.25, 0, 2.25, hex('ff9a3a'), true) // the hot nozzles
+  m.dot(12.25, 0, 2.25, hex('ff9a3a'), true)
+  navLights(m, 0.5, 23, 6.5, 2.5)
+  m.dot(11.75, 2, 8.5, NAV_WHITE, true)
   m.px = 11.5
   m.py = 16
   return m
@@ -1037,6 +1331,17 @@ function su34(): Vox {
   m.set(17, 5, 9, s.team)
   m.box(1, 10, 2, 2, 14, 2, GUN_HI) // bombs under the wings
   m.box(25, 10, 2, 26, 14, 2, GUN_HI)
+  for (const x of [1, 25]) m.box(x, 9.5, 2.5, x + 1, 9.5, 3, GUN) // the bombs' fins
+  for (const x of [5, 22]) {
+    m.box(x, 12, 1, x, 16, 1, hex('9aa09a')) // Kh-29 missiles
+    m.dot(x + 0.25, 16.5, 1.25, COL.white)
+  }
+  pilot(m, 12.5, 27.5, 5.5)
+  pilot(m, 14.5, 27.5, 5.5)
+  m.rod(13.5, 4, 3.5, 13.5, 1, 3.5, GUN_HI) // the sting in the tail
+  m.dot(9.75, 2, 2.75, hex('ff9a3a'), true)
+  m.dot(17.75, 2, 2.75, hex('ff9a3a'), true)
+  navLights(m, 0, 27.5, 7, 3.5)
   m.px = 13.5
   m.py = 18
   return m
@@ -1101,7 +1406,7 @@ function patrolBoat(f: Faction): UnitModel {
   const s = SCHEMES[f]
   const nato = f === 'nato'
   const L = nato ? 32 : 26, W = nato ? 10 : 9
-  const m = new Vox(W, L, 12)
+  const m = new Vox(W, L, 14)
   shipHull(m, W, L, 3, nato ? 10 : 9, s.navy, s.navy2)
   m.box(1, 1, 3, W - 2, L - 8, 3, s.deck)
   if (nato) {
@@ -1119,6 +1424,11 @@ function patrolBoat(f: Faction): UnitModel {
     m.box(3, 12, 8, 5, 13, 8, s.team)
   }
   railing(m, 4, 1, L - 6)
+  sailor(m, 2, 4 + (nato ? 6 : 3), 4)
+  sailor(m, W - 3, L - 9, 4, hex('e8e4d8'))
+  navLights(m, 1.5, W - 2, nato ? 18 : 15, 7.5)
+  m.dot(W / 2, nato ? 15 : 12, nato ? 11.5 : 12.5, NAV_WHITE, true)
+  m.box(W / 2 - 1, 1, 4, W / 2, 1.5, 4.5, hex('e07a2a')) // a life raft on the stern
   m.py = L / 2
   const t = navalGun(nato ? 7 : 6, s.navy2)
   return { hull: m, turret: t, mount: [0, nato ? 9 : 7, 4], muzzle: [8, 1] }
@@ -1152,6 +1462,15 @@ function corvetteShip(f: Faction, angle: number): Vox {
   raft(m, 1, 12, 6)
   raft(m, W - 2, 12, 6)
   railing(m, 6, 1, 30)
+  rhib(m, 1, 17, 6)
+  ciws(m, 5, 22, 12)
+  dome(m, 8, 20, 12, 0.9)
+  foredeck(m, 6, 37, 5)
+  sailor(m, 3, 3, 6)
+  sailor(m, 8, 4, 6, hex('e0b532'))
+  sailor(m, 10, 33, 6)
+  navLights(m, 2, W - 2.5, 25, 11)
+  m.dot(6.25, 17.5, 17.5, NAV_WHITE, true)
   m.box(2, 10, 11, 2, 12, 11, s.team)
   m.box(W - 3, 10, 11, W - 3, 12, 11, s.team)
   m.py = L / 2
@@ -1191,6 +1510,20 @@ function burke(angle: number): Vox {
   raft(m, 1, 23, 7)
   raft(m, W - 2, 23, 7)
   railing(m, 7, 1, 44)
+  ciws(m, 6.5, 39, 15)
+  ciws(m, 6.5, 14, 12)
+  dome(m, 4, 25, 12, 1)
+  dome(m, 11, 25, 12, 1)
+  rhib(m, 1, 14, 7)
+  rhib(m, W - 3, 14, 7)
+  foredeck(m, 7.5, 50, 6)
+  for (const [x, y, c] of [[4, 3, hex('5a7aa8')], [10, 4, hex('e0b532')], [3, 47, hex('5a7aa8')], [12, 42, hex('e8e4d8')]] as [number, number, number][]) sailor(m, x, y, 7, c)
+  navLights(m, 2, W - 2.5, 38, 13)
+  m.dot(7.75, 27, 23.5, NAV_WHITE, true)
+  for (let y = 18; y <= 25; y += 3) {
+    m.dot(4, y, 9, COL.windowLit, true) // portholes lit in the superstructure
+    m.dot(W - 4.5, y, 9, COL.windowLit, true)
+  }
   m.box(3, 29, 14, 3, 31, 14, s.team)
   m.box(W - 4, 29, 14, W - 4, 31, 14, s.team)
   m.py = L / 2
@@ -1228,6 +1561,23 @@ function slava(angle: number): Vox {
   raft(m, 1, 22, 7)
   raft(m, W - 2, 22, 7)
   railing(m, 7, 1, 46)
+  // AK-630 gatlings, the twin 130 mm aft, boats, domes, the crew
+  ciws(m, 4, 27, 14)
+  ciws(m, W - 6, 27, 14)
+  m.box(6, 3, 7, 10, 7, 9, s.navy2)
+  m.rod(7, 7, 8.5, 7, 10, 8.5, GUN)
+  m.rod(9.5, 7, 8.5, 9.5, 10, 8.5, GUN)
+  dome(m, 13, 22, 14, 1)
+  rhib(m, 1, 25, 7)
+  rhib(m, W - 3, 25, 7)
+  foredeck(m, 8, 52, 6)
+  for (const [x, y, c] of [[3, 2, hex('5a7aa8')], [13, 3, hex('e8e4d8')], [8, 46, hex('5a7aa8')], [4, 44, hex('5a7aa8')]] as [number, number, number][]) sailor(m, x, y, 7, c)
+  navLights(m, 4, W - 4.5, 30, 13)
+  m.dot(8.25, 24.25, 23.5, NAV_WHITE, true)
+  for (let y = 16; y <= 28; y += 3) {
+    m.dot(4, y, 9, COL.windowLit, true)
+    m.dot(W - 4.5, y, 9, COL.windowLit, true)
+  }
   m.box(4, 15, 13, 4, 17, 13, s.team)
   m.box(W - 5, 15, 13, W - 5, 17, 13, s.team)
   m.py = L / 2
@@ -1258,6 +1608,17 @@ function landingCraft(f: Faction): Vox {
   antenna(m, 7, 4, 11, 2)
   raft(m, 0, 4, 5)
   railing(m, 5, 10, L - 5)
+  sailor(m, 3, 8, 10)
+  sailor(m, W - 4, 3, 10, hex('e0b532'))
+  sailor(m, 7, L - 6, 2, hex('e0b532'))
+  for (let y = 12; y <= L - 6; y += 6) {
+    m.box(1, y, 5, 1, y, 5.5, GUN) // cleats along the walls
+    m.box(W - 2, y, 5, W - 2, y, 5.5, GUN)
+  }
+  m.box(5, 4, 10, 6, 5, 11, GUN_HI) // a searchlight on the bridge roof
+  m.dot(5.75, 5.5, 11, COL.windowLit, true)
+  navLights(m, 1, W - 1.5, 8, 9.5)
+  m.dot(7.25, 3.5, 13.5, NAV_WHITE, true)
   m.box(3, 1, 9, W - 4, 1, 9, s.team)
   m.py = L / 2
   return m
@@ -1308,6 +1669,30 @@ function carrierShip(f: Faction): Vox {
   }
   // elevators and the edge of the deck
   m.box(23, 20, 7, 25, 26, 7, shade(s.deck, 0.85))
+  if (nato) m.box(23, 52, 7, 25, 58, 7, shade(s.deck, 0.85))
+  // the deck crew in their coloured jerseys, tractors, fuel carts
+  const jerseys = [hex('e0b532'), hex('c8322a'), hex('4a9a4a'), hex('4a6ac8'), hex('8a4ac8'), COL.white]
+  for (let k = 0; k < 14; k++) {
+    const y = 6 + ((k * 37) % 70), x = 3 + ((k * 11) % 17)
+    if (x >= 19 && y >= 32 && y <= 51) continue // not inside the island
+    sailor(m, x, y, 8, jerseys[k % jerseys.length])
+  }
+  for (const [x, y] of [[15, 20], [6, 52], [17, 70]] as [number, number][]) {
+    m.box(x, y, 8, x + 1, y + 2, 8.5, hex('e0b532')) // a deck tractor
+    m.dot(x + 0.5, y + 2.5, 9, GUN)
+  }
+  // the island: masts with antennas, lit windows, the lights
+  m.rod(22.5, 44, 22, 22.5, 44, 29, GUN)
+  m.rod(21, 44, 27, 24, 44, 27, GUN_HI)
+  dome(m, 21, 47, 22, 1)
+  dome(m, 24, 39, 17, 0.8)
+  for (let y = 35; y <= 48; y += 2) m.dot(19.75, y, 11, COL.windowLit, true)
+  navLights(m, 3, 24.5, 46, 8.5)
+  m.dot(22.75, 44, 29.5, NAV_WHITE, true)
+  for (let y = 8; y < L - 8; y += 8) {
+    m.dot(1.5, y, 7.5, hex('fff1b0'), true) // deck edge lights
+    m.dot(W - 2.5, y, 7.5, hex('fff1b0'), true)
+  }
   m.px = W / 2
   m.py = L / 2
   return m

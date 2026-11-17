@@ -5,7 +5,7 @@
 // first two axes so a building needs no turning when it is drawn.
 
 import { Vox } from '../core/voxel'
-import { shade, mix } from '../core/iso'
+import { shade, mix, hex } from '../core/iso'
 import { valueNoise, hash3, mulberry32 } from '../core/rng'
 import { SCHEMES, COL, type Faction, type Scheme } from './colors'
 
@@ -30,11 +30,11 @@ function slab(m: Vox, x0: number, y0: number, x1: number, y1: number, c = COL.co
 
 function windowsX(m: Vox, x0: number, x1: number, y: number, z0: number, z1: number, step: number, lit = 0.25) {
   for (let x = x0; x <= x1; x += step)
-    for (let z = z0; z <= z1; z++) m.set(x, y, z, hash3(x, z, y) < lit ? COL.windowLit : COL.window, false)
+    for (let z = z0; z <= z1; z++) m.set(x, y, z, hash3(x, z, y) < lit ? COL.windowLit : COL.window, hash3(x, z, y) < lit)
 }
 function windowsY(m: Vox, y0: number, y1: number, x: number, z0: number, z1: number, step: number, lit = 0.25) {
   for (let y = y0; y <= y1; y += step)
-    for (let z = z0; z <= z1; z++) m.set(x, y, z, hash3(y, z, x) < lit ? COL.windowLit : COL.window, false)
+    for (let z = z0; z <= z1; z++) m.set(x, y, z, hash3(y, z, x) < lit ? COL.windowLit : COL.window, hash3(y, z, x) < lit)
 }
 
 function flag(m: Vox, x: number, y: number, h: number, s: Scheme) {
@@ -45,6 +45,73 @@ function flag(m: Vox, x: number, y: number, h: number, s: Scheme) {
 
 function sandbags(m: Vox, pts: [number, number][], h = 2) {
   for (const [x, y] of pts) for (let z = 1; z <= h; z++) m.set(x, y, z, hash3(x, y, z) < 0.3 ? shade(COL.sandbag, 0.88) : COL.sandbag)
+}
+
+// ─────────────────────────────────────────────────────────── life round the buildings
+
+/** a soldier or worker standing about (world axes, about 4 units tall) */
+function person(m: Vox, x: number, y: number, s: Scheme | null, shirt?: number) {
+  const uni = s ? shade(s.uniform, 1.1) : shirt ?? hex('5a7aa8')
+  m.box(x, y, 1, x, y, 2, s ? shade(s.uniform2, 1.05) : hex('3a3e44'))
+  m.box(x, y, 3, x, y, 3.5, shirt ?? uni)
+  m.dot(x + 0.25, y + 0.25, 4.5, COL.skin)
+  m.box(x, y, 5, x, y, 5, s ? s.helmet : COL.hazard)
+}
+
+/** a light military car (Wolf / UAZ) parked along x or y */
+function jeep(m: Vox, x: number, y: number, s: Scheme, alongX: boolean) {
+  const [w, l] = alongX ? [5, 3] : [3, 5]
+  m.box(x, y, 1, x + w - 1, y + l - 1, 2, s.base)
+  if (alongX) m.box(x + 1, y, 3, x + 3, y + l - 1, 3.5, s.dark)
+  else m.box(x, y + 1, 3, x + w - 1, y + 3, 3.5, s.dark)
+  m.box(alongX ? x + 3.5 : x, alongX ? y : y + 3.5, 3, alongX ? x + 3.5 : x + w - 1, alongX ? y + l - 1 : y + 3.5, 3.5, COL.window)
+  for (const [a, b] of alongX ? [[x + 0.5, y], [x + 3.5, y], [x + 0.5, y + l - 0.5], [x + 3.5, y + l - 0.5]] : [[x, y + 0.5], [x, y + 3.5], [x + w - 0.5, y + 0.5], [x + w - 0.5, y + 3.5]])
+    m.box(a, b, 0.5, a + 0.5, b + 0.5, 1.5, hex('1f1f1d'))
+  m.dot(alongX ? x + w - 0.5 : x + 0.5, alongX ? y + 0.5 : y + l - 0.5, 1.5, hex('fff1b0'), true)
+  m.dot(alongX ? x + w - 0.5 : x + w - 1, alongX ? y + l - 1 : y + l - 0.5, 1.5, hex('fff1b0'), true)
+}
+
+/** a stack of wooden crates */
+function crates(m: Vox, x: number, y: number, n = 3) {
+  for (let k = 0; k < n; k++) {
+    const cx = x + (k % 2) * 2, cy = y + Math.floor(k / 2) * 2, cz = 1 + (k === n - 1 && n > 2 ? 2 : 0)
+    m.box(cx, cy, cz, cx + 1.5, cy + 1.5, cz + 1.5, k % 2 ? COL.wood : COL.wood2)
+    m.box(cx, cy, cz + 1.5, cx + 1.5, cy + 1.5, cz + 1.5, shade(COL.wood, 1.15))
+  }
+}
+
+/** oil drums standing together */
+function drums(m: Vox, x: number, y: number, c = hex('3f5a3a')) {
+  for (const [dx, dy] of [[0, 0], [1.5, 0], [0.75, 1.5]]) {
+    m.cylZ(x + dx + 0.5, y + dy + 0.5, 0.7, 1, 2.5, c)
+    m.dot(x + dx + 0.5, y + dy + 0.5, 3, shade(c, 1.3))
+  }
+}
+
+/** a lamp post with its light */
+function lamp(m: Vox, x: number, y: number, h = 7) {
+  m.rod(x, y, 1, x, y, h, COL.steelDark)
+  m.rod(x, y, h, x + 1, y + 1, h, COL.steelDark)
+  m.dot(x + 1, y + 1, h - 0.5, COL.windowLit, true)
+}
+
+/** an air-conditioning box on a roof */
+function aircon(m: Vox, x: number, y: number, z: number) {
+  m.box(x, y, z, x + 2, y + 1.5, z + 1, COL.concrete3)
+  m.cylZ(x + 1, y + 0.75, 0.6, z + 1.5, z + 1.5, COL.steelDark)
+}
+
+/** a satellite dish on a roof */
+function satDish(m: Vox, x: number, y: number, z: number) {
+  m.rod(x, y, z, x, y, z + 1, COL.steelDark)
+  m.ball(x + 0.5, y + 0.5, z + 2, 1.2, 1.2, 1.2, COL.white)
+  m.box(x, y, z + 1.5, x + 1, y + 1, z + 2.5, -1)
+  m.box(x, y, z + 1, x + 0.5, y + 0.5, z + 1.5, COL.white)
+}
+
+/** a red warning light for low-flying aircraft */
+function beacon(m: Vox, x: number, y: number, z: number) {
+  m.dot(x, y, z, hex('ff3a2a'), true)
 }
 
 function hq(f: Faction): Vox {
@@ -82,6 +149,22 @@ function hq(f: Faction): Vox {
   for (let i = 0; i < 7; i++) bags.push([40 + i, 42], [42, 40 + i])
   sandbags(m, bags)
   flag(m, 44, 4, 30, s)
+  // on the roof: air conditioning, dishes, antennas with lights
+  aircon(m, 26, 26, 14)
+  aircon(m, 30, 18, 14)
+  satDish(m, 26, 9, 14)
+  satDish(m, 33, 31, 14)
+  beacon(m, 30, 12, 31)
+  beacon(m, 14, 15, 33.5)
+  // the guard at the door, a car, lamps, a barrier
+  person(m, 17, 43, s)
+  person(m, 26, 43, s)
+  jeep(m, 30, 41, s, true)
+  lamp(m, 15, 44)
+  lamp(m, 28, 44)
+  m.box(8, 44, 2, 14, 44, 2, COL.hazard)
+  m.box(8, 44, 1, 8, 44, 2, COL.steelDark)
+  person(m, 41, 39, s)
   return m
 }
 
@@ -108,6 +191,22 @@ function power(f: Faction): Vox {
   }
   m.box(18, 16, 1, 18, 29, 2, COL.steel)
   m.box(2, 28, 10, 16, 28, 10, s.team)
+  // ladder and red lights on the chimney, pipes to the yard, a fence, the night shift
+  for (let z = 3; z <= 31; z += 1) m.dot(25.5, 8, z, COL.steelDark)
+  beacon(m, 23, 5.5, 33.5)
+  beacon(m, 23, 10.5, 27)
+  m.rod(16, 20, 8, 20, 20, 8, COL.steel)
+  m.rod(16, 26, 8, 20, 26, 8, COL.steel)
+  m.rod(16, 20, 6, 16, 26, 6, COL.steel)
+  for (let k = 19; k <= 30; k += 2) m.rod(k, 30, 1, k, 30, 4, COL.steelDark)
+  m.rod(19, 30, 4, 30, 30, 4, COL.steelDark)
+  m.rod(30, 15, 4, 30, 30, 4, COL.steelDark)
+  for (let k = 15; k <= 30; k += 2) m.rod(30, k, 1, 30, k, 4, COL.steelDark)
+  m.box(17, 29, 2, 18, 29, 3, COL.hazard) // warning sign
+  person(m, 22, 13, null, COL.hazard)
+  aircon(m, 5, 6, 12)
+  aircon(m, 9, 18, 12)
+  lamp(m, 17, 13)
   return m
 }
 
@@ -144,6 +243,20 @@ function refinery(f: Faction): Vox {
   m.box(43, 43, 1, 43, 43, 6, COL.steelDark)
   m.box(3, 30, 8, 28, 30, 8, s.team)
   flag(m, 2, 42, 22, s)
+  // ladders on the silos, the conveyor's legs, workers, a forklift, crates and drums, lamps
+  for (const y of [7, 19]) for (let z = 2; z <= 24; z++) m.dot(44.5, y, z, COL.steelDark)
+  for (const x of [31, 34]) m.rod(x, 6.5, 1, x, 6.5, 18, COL.steelDark)
+  beacon(m, 39, 7, 28)
+  person(m, 37, 38, null, COL.hazard)
+  person(m, 24, 34, null, hex('e07a2a'))
+  m.box(20, 36, 1, 22, 38, 2, COL.hazard) // forklift
+  m.box(20, 38.5, 1, 22, 38.5, 4, COL.steelDark)
+  m.box(20.5, 36.5, 3, 21.5, 37, 3.5, COL.black)
+  crates(m, 6, 35, 4)
+  drums(m, 13, 40)
+  lamp(m, 31, 29, 8)
+  lamp(m, 45, 31, 8)
+  aircon(m, 8, 10, 15)
   return m
 }
 
@@ -163,6 +276,16 @@ function barracks(f: Faction): Vox {
   sandbags(m, bags, 3)
   flag(m, 29, 3, 24, s)
   m.box(26, 6, 1, 26, 18, 6, s.team)
+  // soldiers at drill on the yard, their sergeant, a water tank, a jeep, lamps, a chimney
+  for (let r = 0; r < 2; r++) for (let k = 0; k < 4; k++) person(m, 8 + k * 2, 21.5 + r * 1.5, s)
+  person(m, 17, 22.5, s)
+  m.cylZ(5, 27, 1.5, 1, 4, COL.steel)
+  m.rod(5, 27, 4, 5, 27, 5, COL.steelDark)
+  jeep(m, 20, 26.5, s, true)
+  lamp(m, 12, 20.5)
+  m.box(6, 9, 13, 7, 10, 17, COL.brick)
+  m.dot(6.5, 9.5, 18, hex('8a8a84'))
+  for (let x = 5; x <= 25; x += 3) m.dot(x, 19.25, 6, COL.windowLit, true) // the lamp over each window
   return m
 }
 
@@ -191,6 +314,24 @@ function factory(f: Faction): Vox {
   m.cylZ(40, 7, 2, 21, 27, COL.brick)
   m.box(3, 33, 13, 44, 33, 13, s.team)
   for (let i = 4; i < 44; i += 2) m.set(i, 46, 0, COL.hazard)
+  // a new vehicle rolling out of the big door, the crane's hook, workers, floodlights, roof vents
+  m.box(19, 35, 1, 27, 40, 3, s.base)
+  m.box(21, 36, 4, 25, 39, 5, s.dark)
+  m.rod(23, 39, 5, 23, 44, 5, s.dark)
+  for (const x of [19, 27]) m.box(x, 35, 0.5, x, 40, 1.5, hex('2a2a26'))
+  m.rod(22.5, 36, 15, 22.5, 36, 9, COL.steelDark)
+  m.box(22, 35.5, 8, 23, 36.5, 8.5, COL.hazard)
+  person(m, 16, 38, null, hex('e07a2a'))
+  person(m, 30, 37, null, hex('5a7aa8'))
+  person(m, 29, 41, s)
+  for (const x of [8, 39]) {
+    m.rod(x, 34, 1, x, 34, 12, COL.steelDark)
+    m.box(x - 0.5, 34, 12, x + 0.5, 34.5, 12.5, COL.windowLit, true)
+  }
+  for (let x = 6; x <= 42; x += 8) m.box(x, 20, 21, x + 1, 21, 22, COL.steel)
+  drums(m, 40, 40, COL.hazard)
+  crates(m, 5, 40, 3)
+  beacon(m, 40, 7, 28)
   return m
 }
 
@@ -221,6 +362,18 @@ function radar(f: Faction): Vox {
   m.box(23, 21, 1, 28, 28, 5, s.base)
   m.box(24, 22, 6, 25, 23, 8, COL.steelDark)
   flag(m, 27, 3, 20, s)
+  // a warning light on the mast, whip antennas, cables to the generator, operators, a car, a fence
+  beacon(m, 12.5, 12.5, 23)
+  m.rod(6, 6, 11, 6, 6, 18, COL.steelDark)
+  m.rod(19, 6, 11, 19, 6, 16, COL.steelDark)
+  m.rod(21, 18, 2, 23, 24, 2, COL.black)
+  for (let x = 6; x <= 18; x += 4) m.dot(x, 21.5, 7.5, COL.windowLit, true)
+  person(m, 15, 24, s)
+  person(m, 9, 23, null, hex('5a7aa8'))
+  jeep(m, 3, 25, s, true)
+  for (let k = 2; k <= 29; k += 3) m.rod(29.5, k, 1, 29.5, k, 3.5, COL.steelDark)
+  m.rod(29.5, 2, 3.5, 29.5, 29, 3.5, COL.steelDark)
+  aircon(m, 16, 6, 11)
   return m
 }
 
@@ -248,6 +401,20 @@ function helipad(f: Faction): Vox {
   m.set(27, 5, 18, s.team, true)
   m.cylY(4, 4, 2.5, 22, 29, COL.steel)
   m.box(24, 8, 9, 30, 8, 9, s.team)
+  // a windsock, the fuel hose, ground crew, a fuel bowser, landing lights round the circle
+  m.rod(29, 29, 1, 29, 29, 9, COL.steelDark)
+  for (let k = 0; k < 4; k++) m.box(29 - k, 29, 8.5 - k * 0.25, 29 - k, 29.5, 9 - k * 0.25, k % 2 ? COL.white : hex('e07a2a'))
+  m.rod(6, 25, 2, 12, 23, 1, COL.black)
+  person(m, 22, 14, s)
+  person(m, 9, 9, null, COL.hazard)
+  m.box(2, 12, 1, 4, 18, 3, s.base)
+  m.box(2, 17, 3, 4, 18, 4, s.dark)
+  m.cylY(3, 3.5, 1, 12, 16, COL.steel)
+  for (let a = 0; a < 8; a++) {
+    const t = (a / 8) * Math.PI * 2
+    m.dot(16 + Math.cos(t) * 11.5, 16 + Math.sin(t) * 11.5, 2, hex('5aff7a'), true)
+  }
+  m.dot(25, 5, 11, COL.windowLit, true)
   return m
 }
 
@@ -263,13 +430,20 @@ function bunker(f: Faction): Vox {
   }
   m.set(8, 15, 1, s.team)
   m.set(15, 8, 1, s.team)
+  // sandbags at the entrance, an ammunition box, a periscope and an antenna on the roof
+  sandbags(m, [[13, 13], [14, 12], [12, 14], [14, 13], [13, 14]], 2)
+  m.box(2, 12, 1, 3, 13, 2, hex('4a5634'))
+  m.box(5, 6, 6, 5, 6, 7, COL.steelDark)
+  m.rod(11, 5, 6, 11, 5, 9.5, COL.steelDark)
   return m
 }
 function bunkerGun(f: Faction): Vox {
   const s = SCHEMES[f]
   const m = new Vox(5, 10, 3)
   m.box(1, 0, 0, 3, 4, 1, s.base)
-  m.box(2, 4, 1, 2, 9, 1, s.metal)
+  m.rod(2.5, 4, 1.5, 2.5, 9, 1.5, s.metal)
+  m.box(3, 1, 1, 3.5, 2, 1.5, hex('4a5634')) // ammunition box
+  m.box(1, 3.5, 1.5, 3, 3.5, 2, COL.steelDark) // the gun shield
   m.set(2, 1, 2, s.team)
   m.px = 2.5
   m.py = 2.5
@@ -287,6 +461,8 @@ function rocketSite(f: Faction): Vox {
   m.box(2, 2, 0, 13, 13, 0, COL.sand)
   sandbags(m, bags, 2)
   m.set(8, 15, 1, s.team)
+  m.box(3, 10, 1, 4.5, 11, 1.5, hex('4a5634')) // reload crates
+  m.box(3, 8.5, 1, 4.5, 9.5, 1.5, hex('4a5634'))
   return m
 }
 function rocketLauncher(f: Faction): Vox {
@@ -298,6 +474,9 @@ function rocketLauncher(f: Faction): Vox {
   m.set(1, 9, 4, s.track); m.set(2, 9, 4, s.track)
   m.set(7, 9, 4, s.track); m.set(8, 9, 4, s.track)
   m.box(4, 3, 3, 5, 6, 4, s.team)
+  for (const x of [1, 2, 7, 8]) m.dot(x + 0.25, 9.5, 4.25, hex('c8cac0')) // missile noses
+  m.box(4, 2, 5, 5, 2.5, 6, COL.steelDark) // the sight
+  m.dot(4.5, 2.75, 5.5, COL.window, true)
   m.px = 5
   m.py = 4.5
   return m
@@ -342,13 +521,18 @@ export function treeModel(kind: 'oak' | 'pine' | 'birch' | 'bush', seed: number)
       m.cylZ(8, 8, rad, z, z, z % 3 === 0 ? COL.pine3 : r() < 0.5 ? COL.pine1 : COL.pine2)
     }
     m.paint((x, y, z, c) => (c !== COL.trunk && hash3(x, y, z + seed) < 0.06 ? -1 : c))
+    // cones hanging under the boughs
+    for (let i = 0; i < 6; i++) {
+      const z = 5 + r() * (top - 8), a = r() * Math.PI * 2, k = (top - z) / (top - 3)
+      m.dot(8 + Math.cos(a) * (k * 5 + 0.6), 8 + Math.sin(a) * (k * 5 + 0.6), z - 0.5, hex('6a4a2a'))
+    }
     return m
   }
   if (kind === 'bush') {
     m.ball(8, 8, 2.5, 4, 3.5, 3, COL.leaf2)
     m.paint((x, y, z, c) => {
       const h = hash3(x, y, z + seed)
-      return h < 0.3 ? COL.leaf1 : h > 0.8 ? COL.leaf3 : c
+      return h < 0.3 ? COL.leaf1 : h > 0.8 ? COL.leaf3 : h > 0.785 ? hex('b8322a') : c
     })
     return m
   }
@@ -356,6 +540,16 @@ export function treeModel(kind: 'oak' | 'pine' | 'birch' | 'bush', seed: number)
   const th = birch ? 9 : 6
   m.box(7, 7, 0, 8, 8, th, birch ? COL.white : COL.trunk)
   if (birch) for (let z = 1; z < th; z += 2) m.set(7, 8, z, COL.black)
+  else {
+    // bark: dark furrows, roots spreading at the foot
+    for (let z = 0; z < th; z += 1) m.dot(8.75, 7.25 + (z % 2) * 0.75, z + 0.25, shade(COL.trunk, 0.75))
+    for (const [dx, dy] of [[1, 0], [-1, 0.5], [0.5, 1], [0, -1]]) m.rod(7.75, 7.75, 0.5, 7.75 + dx * 1.8, 7.75 + dy * 1.8, 0, shade(COL.trunk, 0.9))
+  }
+  // boughs reaching into the crown
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.6
+    m.rod(7.75, 7.75, th - 1, 7.75 + Math.cos(a) * 3.5, 7.75 + Math.sin(a) * 3.5, th + 3.5, birch ? COL.white : COL.trunk)
+  }
   const cz = th + 5 + r() * 2
   const rad = birch ? 4.2 : 6.2 + r() * 1.3
   const autumn = r() < 0.12
@@ -399,6 +593,30 @@ export function houseModel(kind: 'house' | 'timber' | 'church' | 'barn', seed: n
       m.box(Math.round(12.5 - k), Math.round(7 - k), z, Math.round(12.5 + k), Math.round(7 + k), z, COL.copper)
     }
     m.box(12, 7, 32, 12, 7, 33, COL.yellow)
+    m.box(11.5, 7, 33.5, 12.5, 7, 33.5, COL.yellow) // the cross bar
+    // clock faces, louvres of the belfry, the portal with steps, a lantern
+    for (const [x, y, ax] of [[12, 10.5, false], [15.5, 7, true]] as [number, number, boolean][]) {
+      m.box(ax ? x : x - 0.5, ax ? y - 0.5 : y, 18.5, ax ? x : x + 1, ax ? y + 1 : y, 19.5, COL.white)
+      m.dot(ax ? x + 0.25 : x + 0.25, ax ? y + 0.25 : y + 0.25, 19.25, COL.black)
+    }
+    for (let z = 15; z <= 17; z += 1) {
+      m.dot(11.5, 10.5, z, hex('2a2826'))
+      m.dot(13, 10.5, z, hex('2a2826'))
+      m.dot(15.5, 6.5, z, hex('2a2826'))
+      m.dot(15.5, 8, z, hex('2a2826'))
+    }
+    m.box(4, 11, 0, 6, 11, 4, COL.wood2)
+    m.box(4, 11, 4.5, 6, 11, 4.5, hex('c8c2b0'))
+    m.box(3.5, 11.5, 0, 6.5, 12.5, 0, COL.concrete3)
+    m.dot(5.25, 12, 5.5, COL.windowLit, true)
+    // the churchyard: stones, little crosses, a yew
+    for (const [x, y] of [[2, 13.5], [4.5, 14], [7, 13.5], [9, 14.5], [2.5, 15], [11.5, 13.5]] as [number, number][]) {
+      m.box(x, y, 0, x + 0.5, y, 1, COL.rock3)
+      m.dot(x - 0.25, y, 0.75, COL.rock3)
+      m.dot(x + 0.75, y, 0.75, COL.rock3)
+    }
+    m.ball(14, 14, 2, 1.6, 1.6, 2.2, COL.pine1)
+    for (let x = 0.5; x <= 15.5; x += 1.5) m.dot(x, 15.5, 0.5, COL.rock2) // a low wall
     return m
   }
   const h = kind === 'barn' ? 6 : 6 + Math.floor(r() * 3)
@@ -432,6 +650,58 @@ export function houseModel(kind: 'house' | 'timber' | 'church' | 'barn', seed: n
     for (let i = 0; i <= 6; i++) m.box(x0 - 1 + i, y0 - 1, h + 1 + i, x1 + 1 - i, y1 + 1, h + 1 + i, i % 2 ? rc : shade(rc, 0.92))
   }
   if (kind !== 'barn') m.box(4, 5, h + 2, 5, 6, h + 7, COL.brick)
+  const q = mulberry32(seed * 977 + 31)
+  if (kind === 'barn') {
+    // hay showing in the loft door, a bale and a plough outside
+    m.box(6.5, y1, 5, 8.5, y1, 6, COL.hay)
+    m.box(6.5, y1 + 0.5, 4.5, 8.5, y1 + 0.5, 4.5, COL.wood2)
+    m.cylX(14.5, 1.5, 1.4, 10, 12.5, COL.hay)
+    m.rod(2, 14, 1, 5, 14.5, 1, COL.steelDark)
+    for (const x of [2.5, 3.5, 4.5]) m.rod(x, 14.5, 1, x, 15, 0, COL.steelDark)
+    m.box(4, y1 + 0.5, 0, 5, y1 + 0.5, 3, COL.wood) // the open door leaf
+    return m
+  }
+  // the chimney's cap, gutters along the eaves
+  m.box(3.5, 4.5, h + 7.5, 5.5, 6.5, h + 7.5, COL.concrete2)
+  if (along) {
+    m.rod(x0 - 1, y1 + 1.5, h + 0.75, x1 + 1, y1 + 1.5, h + 0.75, COL.steel)
+    m.rod(x1 + 1, y1 + 1.5, h + 0.75, x1 + 1, y1 + 1.5, 0.5, COL.steel) // the downpipe
+  } else {
+    m.rod(x1 + 1.5, y0 - 1, h + 0.75, x1 + 1.5, y1 + 1, h + 0.75, COL.steel)
+    m.rod(x1 + 1.5, y1 + 1, h + 0.75, x1 + 1.5, y1 + 1, 0.5, COL.steel)
+  }
+  // shutters beside the windows, flower boxes below some
+  const shut = q() < 0.5 ? hex('3f6a3a') : q() < 0.5 ? hex('6a4a2a') : hex('5a6a7a')
+  const flowers = [hex('c8322a'), hex('e8a0c0'), hex('f0c840')]
+  for (let x = x0 + 2; x <= x1 - 1; x += 3) {
+    if (x === 7 || x === 8) continue
+    for (let zz = 2; zz < 4; zz += 0.5) {
+      m.dot(x - 0.5, y1 + 1, zz, shut)
+      m.dot(x + 1, y1 + 1, zz, shut)
+    }
+    if (q() < 0.6) m.box(x, y1 + 1, 1.5, x + 0.5, y1 + 1, 1.5, flowers[Math.floor(q() * 3)])
+  }
+  for (let y = y0 + 2; y <= y1 - 1; y += 3)
+    for (let zz = 2; zz < 4; zz += 0.5) {
+      m.dot(x1 + 1, y - 0.5, zz, shut)
+      m.dot(x1 + 1, y + 1, zz, shut)
+    }
+  // the front door: step, handle, a lamp above
+  m.box(6.5, y1 + 1, 0, 9, y1 + 2, 0, COL.concrete3)
+  m.dot(8.5, y1 + 1, 1.5, COL.yellow)
+  m.dot(7.75, y1 + 1, 4, COL.windowLit, true)
+  // a garden: fence along the front with its gate, a letter box, a bush, sometimes a dish
+  for (let x = 0.5; x <= 15.5; x += 1) if (x < 6 || x > 9.5) m.rod(x, 15.5, 0, x, 15.5, 1.5, COL.white)
+  m.rod(0.5, 15.5, 1.25, 5.5, 15.5, 1.25, COL.white)
+  m.rod(10.5, 15.5, 1.25, 15.5, 15.5, 1.25, COL.white)
+  m.box(10, 15, 1.5, 10.5, 15.5, 2, hex('c8322a'))
+  m.rod(10.25, 15.25, 0, 10.25, 15.25, 1.5, COL.steelDark)
+  m.ball(14, 14, 1.2, 1.4, 1.4, 1.3, q() < 0.5 ? COL.leaf2 : COL.leaf3)
+  if (q() < 0.35) {
+    m.box(x1, 6, h + 1, x1 + 0.5, 6.5, h + 1.5, COL.steelDark)
+    m.ball(x1 + 1, 6.5, h + 2, 0.9, 0.9, 0.9, COL.white)
+  }
+  if (kind === 'timber' && q() < 0.6) m.cylZ(1.5, 14, 0.9, 0, 1.5, hex('5a4636')) // a rain barrel
   return m
 }
 
@@ -453,6 +723,12 @@ export function oreModel(stage: number, seed: number): Vox {
     if (h < 0.42) return COL.ore2
     return c
   })
+  // crystals poking out of the rocks, catching the light
+  for (let i = 0; i < 2 + stage * 2; i++) {
+    const x = 3 + r() * 10, y = 3 + r() * 10, hgt = 1.5 + r() * (1 + stage)
+    m.rod(x, y, 0.5, x + (r() - 0.5), y + (r() - 0.5), hgt, COL.ore3)
+    m.dot(x + 0.25, y + 0.25, 0.5 + hgt * 0.5, COL.ore, true)
+  }
   return m
 }
 
@@ -491,6 +767,23 @@ function airfield(f: Faction): Vox {
   m.box(54, 21, 19, 54, 21, 21, COL.steelDark)
   m.set(54, 21, 21, s.team, true)
   m.box(1, 45, 1, 8, 46, 1, s.team)
+  // approach lights, a fuel truck, a tug, ground crew, the windsock, the tower's lit windows
+  for (let y = 4; y <= 15; y += 2) {
+    m.dot(0.5, y, 1, hex('5aff7a'), true)
+    m.dot(62.5, y, 1, hex('ff3a2a'), true)
+  }
+  m.box(48, 30, 1, 52, 34, 3, s.base)
+  m.cylX(31.5, 3.5, 1.3, 48, 51, COL.steel)
+  m.box(52, 30, 1, 53, 34, 4, s.dark)
+  m.box(22, 40, 1, 24, 42, 2, COL.hazard)
+  person(m, 20, 38, null, COL.hazard)
+  person(m, 37, 30, null, hex('4a9a4a'))
+  person(m, 47, 41, s)
+  m.rod(50, 20, 1, 50, 20, 8, COL.steelDark)
+  for (let k = 0; k < 4; k++) m.box(50 - k, 20, 7.5 - k * 0.25, 50 - k, 20.5, 8 - k * 0.25, k % 2 ? COL.white : hex('e07a2a'))
+  for (let x = 52; x <= 56; x += 2) m.dot(x, 23.5, 10, COL.windowLit, true)
+  beacon(m, 54, 21, 22)
+  drums(m, 44, 43)
   return m
 }
 
@@ -524,6 +817,26 @@ function shipyard(f: Faction): Vox {
   for (let x = 6; x < 44; x += 6) m.box(x, 4, 1, x, 4, 2, COL.black) // bollards
   m.box(4, 46, 9, 30, 46, 9, s.team)
   flag(m, 46, 36, 20, s)
+  // the hook and its cable, welders' sparks on the hull, workers, scaffolding, lamps, stacked plates
+  m.rod(21.5, 24, 11, 21.5, 24, 8, COL.steelDark)
+  m.box(21, 23.5, 7, 22, 24.5, 7.5, COL.hazard)
+  for (const [x, y, z] of [[12, 19, 3], [28, 29, 4], [33, 20, 3]]) m.dot(x, y, z, hex('fff6d8'), true)
+  person(m, 12, 17, null, hex('e07a2a'))
+  person(m, 30, 31, null, COL.hazard)
+  person(m, 38, 26, null, hex('5a7aa8'))
+  for (let x = 8; x <= 38; x += 6) {
+    m.rod(x, 17.5, 1, x, 17.5, 6, COL.steel)
+    m.rod(x, 30.5, 1, x, 30.5, 6, COL.steel)
+  }
+  m.rod(8, 17.5, 6, 38, 17.5, 6, COL.steel)
+  m.rod(8, 30.5, 6, 38, 30.5, 6, COL.steel)
+  for (const x of [4, 43]) {
+    m.rod(x, 34, 1, x, 34, 12, COL.steelDark)
+    m.box(x - 0.5, 34, 12, x + 0.5, 34.5, 12.5, COL.windowLit, true)
+  }
+  for (let k = 0; k < 4; k++) m.box(35, 39 + k * 0.5, 7 + k * 0.5, 43, 44, 7 + k * 0.5, shade(COL.steel, 0.9 + k * 0.05))
+  crates(m, 32, 31, 3)
+  beacon(m, 23.5, 14, 24)
   return m
 }
 
