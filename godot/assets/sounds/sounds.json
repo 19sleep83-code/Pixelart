@@ -1,0 +1,311 @@
+{
+ "note": "Platzhalter-Töne. Jede WAV kann durch eine echte Aufnahme gleichen Namens ersetzt werden.",
+ "events": {
+  "bullet": {
+   "files": [
+    "shot_bullet_0.wav",
+    "shot_bullet_1.wav",
+    "shot_bullet_2.wav"
+   ],
+   "volumeDb": -10,
+   "pitchSpread": 0.12,
+   "maxVoices": 6,
+   "positional": true,
+   "desc": "MG und Gewehre: kurzer Knall, mehrere Varianten"
+  },
+  "snipe": {
+   "files": [
+    "shot_snipe.wav"
+   ],
+   "volumeDb": -4,
+   "pitchSpread": 0.05,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Scharfschützengewehr: lauter, scharfer Knall mit Hall"
+  },
+  "shell": {
+   "files": [
+    "shot_shell_0.wav",
+    "shot_shell_1.wav"
+   ],
+   "volumeDb": -3,
+   "pitchSpread": 0.1,
+   "maxVoices": 4,
+   "positional": true,
+   "desc": "Panzerkanone / Maschinenkanone: tiefer Abschuss"
+  },
+  "flak": {
+   "files": [
+    "shot_flak.wav"
+   ],
+   "volumeDb": -8,
+   "pitchSpread": 0.08,
+   "maxVoices": 3,
+   "positional": true,
+   "desc": "Flak: schnelle Viererserie"
+  },
+  "rocket": {
+   "files": [
+    "shot_rocket.wav"
+   ],
+   "volumeDb": -6,
+   "pitchSpread": 0.1,
+   "maxVoices": 4,
+   "positional": true,
+   "desc": "Panzerabwehrrakete: Zischen beim Start"
+  },
+  "art": {
+   "files": [
+    "shot_art.wav"
+   ],
+   "volumeDb": 0,
+   "pitchSpread": 0.06,
+   "maxVoices": 3,
+   "positional": true,
+   "desc": "Haubitze: schwerer, langer Abschuss"
+  },
+  "mlrs": {
+   "files": [
+    "shot_mlrs.wav"
+   ],
+   "volumeDb": -2,
+   "pitchSpread": 0.06,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Raketenwerfer: rasche Folge von Starts"
+  },
+  "missile": {
+   "files": [
+    "shot_missile.wav"
+   ],
+   "volumeDb": -2,
+   "pitchSpread": 0.05,
+   "maxVoices": 3,
+   "positional": true,
+   "desc": "Marschflugkörper / Jet-Raketen: langes Rauschen"
+  },
+  "hit": {
+   "files": [
+    "hit_0.wav",
+    "hit_1.wav"
+   ],
+   "volumeDb": -6,
+   "pitchSpread": 0.15,
+   "maxVoices": 5,
+   "positional": true,
+   "desc": "Treffer auf Panzerung: metallischer Schlag"
+  },
+  "boom": {
+   "files": [
+    "boom_0.wav",
+    "boom_1.wav",
+    "boom_2.wav"
+   ],
+   "volumeDb": 0,
+   "pitchSpread": 0.12,
+   "maxVoices": 6,
+   "positional": true,
+   "desc": "Einschlag von Artillerie, Raketen, Granaten"
+  },
+  "explode": {
+   "files": [
+    "explode.wav"
+   ],
+   "volumeDb": 2,
+   "pitchSpread": 0.08,
+   "maxVoices": 4,
+   "positional": true,
+   "desc": "Fahrzeug, Flugzeug oder Schiff explodiert"
+  },
+  "collapse": {
+   "files": [
+    "collapse.wav"
+   ],
+   "volumeDb": 3,
+   "pitchSpread": 0.05,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Gebäude stürzt ein: Explosion und Poltern"
+  },
+  "scream": {
+   "files": [
+    "scream.wav"
+   ],
+   "volumeDb": -12,
+   "pitchSpread": 0.2,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Soldat fällt (Platzhalter; echter Ruf sparsam einsetzen)"
+  },
+  "ack": {
+   "files": [
+    "ui_ack.wav"
+   ],
+   "volumeDb": -10,
+   "pitchSpread": 0.03,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Befehl bestätigt (später: Sprachbestätigung „Verstanden“, „Bewegung“ …)"
+  },
+  "unit": {
+   "files": [
+    "ui_unit.wav"
+   ],
+   "volumeDb": -8,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Einheit fertig ausgebildet / gebaut"
+  },
+  "ready": {
+   "files": [
+    "ui_ready.wav"
+   ],
+   "volumeDb": -8,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Gebäude bereit zum Platzieren"
+  },
+  "place": {
+   "files": [
+    "ui_place.wav"
+   ],
+   "volumeDb": -6,
+   "pitchSpread": 0.05,
+   "maxVoices": 1,
+   "positional": true,
+   "desc": "Gebäude gesetzt: dumpfer Aufschlag, Baulärm"
+  },
+  "sell": {
+   "files": [
+    "ui_sell.wav"
+   ],
+   "volumeDb": -8,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Gebäude verkauft"
+  },
+  "alert": {
+   "files": [
+    "ui_alert.wav"
+   ],
+   "volumeDb": -6,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Basis / Einheiten werden angegriffen (später Funkspruch)"
+  },
+  "promote": {
+   "files": [
+    "ui_promote.wav"
+   ],
+   "volumeDb": -8,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Beförderung"
+  },
+  "capture": {
+   "files": [
+    "ui_capture.wav"
+   ],
+   "volumeDb": -6,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": true,
+   "desc": "Gebäude erobert"
+  },
+  "board": {
+   "files": [
+    "board.wav"
+   ],
+   "volumeDb": -10,
+   "pitchSpread": 0.1,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Einsteigen (Schritte, Luke)"
+  },
+  "unload": {
+   "files": [
+    "board.wav"
+   ],
+   "volumeDb": -10,
+   "pitchSpread": 0.1,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Aussteigen / Rampe"
+  },
+  "jet": {
+   "files": [
+    "jet_flyby.wav"
+   ],
+   "volumeDb": 0,
+   "pitchSpread": 0.06,
+   "maxVoices": 2,
+   "positional": true,
+   "desc": "Jet startet / überfliegt"
+  },
+  "loop_tank": {
+   "files": [
+    "loop_tank.wav"
+   ],
+   "volumeDb": -16,
+   "pitchSpread": 0.05,
+   "maxVoices": 6,
+   "positional": true,
+   "desc": "Motor und Ketten fahrender Kettenfahrzeuge (Schleife)"
+  },
+  "loop_rotor": {
+   "files": [
+    "loop_rotor.wav"
+   ],
+   "volumeDb": -14,
+   "pitchSpread": 0.05,
+   "maxVoices": 4,
+   "positional": true,
+   "desc": "Hubschrauber-Rotor (Schleife)"
+  },
+  "loop_rain": {
+   "files": [
+    "loop_rain.wav"
+   ],
+   "volumeDb": -14,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Regen (Schleife, je nach Wetter)"
+  },
+  "loop_wind": {
+   "files": [
+    "loop_wind.wav"
+   ],
+   "volumeDb": -20,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Wind über dem Land (Grundgeräusch)"
+  },
+  "loop_sea": {
+   "files": [
+    "loop_sea.wav"
+   ],
+   "volumeDb": -18,
+   "pitchSpread": 0.0,
+   "maxVoices": 1,
+   "positional": true,
+   "desc": "Brandung an der Küste (Schleife)"
+  },
+  "thunder": {
+   "files": [
+    "thunder.wav"
+   ],
+   "volumeDb": -2,
+   "pitchSpread": 0.1,
+   "maxVoices": 1,
+   "positional": false,
+   "desc": "Donner nach einem Blitz"
+  }
+ }
+}

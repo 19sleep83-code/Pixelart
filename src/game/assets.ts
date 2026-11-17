@@ -25,7 +25,8 @@ export interface UnitArt {
   wreckTurret?: Rot
   mount: [number, number, number]
   muzzle: [number, number]
-  rotor?: { r: number; z: number; tail: number }
+  rotor?: { r: number; z: number; tail: number; blades?: number; tailSide?: number }
+  burner?: { back: number; side: number; z: number }
   icon: HTMLCanvasElement
 }
 
@@ -255,6 +256,7 @@ export async function buildAssets(onProgress: (t: number, what: string) => void,
           mount: um.mount ?? [0, 0, 0],
           muzzle: um.muzzle ?? [6, 3],
           rotor: um.rotor,
+          burner: um.burner,
           icon: makeCanvas(1, 1),
         }
         if (inf) {

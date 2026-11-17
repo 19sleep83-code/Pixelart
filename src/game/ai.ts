@@ -22,6 +22,9 @@ export class AI {
   private nextFleet: number
   private strikeT = 0
   private holdT = 20
+  /** the wave on its way: it gathers short of the target first, then goes in together */
+  private wave: { ids: number[]; stage: { x: number; y: number }; target: Ent; t0: number; phase: 'gather' | 'go' } | null = null
+  private waves = 0
   private engT = 200
 
   constructor(public g: Game) {
@@ -141,7 +144,7 @@ export class AI {
     this.extraT++
     if (pl.credits > 2500 && this.extraT % 8 === 0) {
       const defs = this.mine().filter((e) => e.b?.defense).length
-      if (defs < 10) g.queueItem(this.p, 'build', this.r() < 0.5 ? 'rocket' : 'bunker')
+      if (defs < 6) g.queueItem(this.p, 'build', this.r() < 0.5 ? 'rocket' : 'bunker')
     }
   }
 
@@ -205,23 +208,50 @@ export class AI {
       const home = units.filter((u) => !this.attackers.has(u.id) && Math.hypot(u.x - hurt.x, u.y - hurt.y) < 22)
       for (const u of home) if (u.order === 'idle' || (u.order === 'amove' && !u.target)) g.commandMove([u], foe.x, foe.y, true)
     }
-    // attack waves
+    // attack waves: they gather short of the enemy base, then go in together
     for (const id of this.attackers) if (!g.byId.has(id)) this.attackers.delete(id)
     const idle = units.filter((u) => !this.attackers.has(u.id) && (u.order === 'idle' || (u.order === 'amove' && !u.dest && !u.path.length)))
-    if (g.time > this.nextAttack && (idle.length >= this.waveSize || (g.time > this.nextAttack + 120 && idle.length >= 5))) {
-      const target = this.targetBuilding()
-      if (target) {
-        g.commandMove(idle, target.x, target.y, true)
-        for (const u of idle) this.attackers.add(u.id)
-        this.waveSize = Math.min(24, this.waveSize + 2)
-        this.nextAttack = g.time + [150, 110, 80][g.opts.difficulty]
+    // late in the game: everything but a few guards goes
+    const allIn = g.time > 18 * 60
+    const keep = allIn ? 3 : 0
+    const ready = idle.length - keep >= this.waveSize || (g.time > this.nextAttack + 90 && idle.length - keep >= 5)
+    if (!this.wave && g.time > this.nextAttack && ready) {
+      const target = this.siegeTarget()
+      const hq = this.mine('hq')[0] ?? this.mine().find((e) => e.isB)
+      if (target && hq) {
+        const go = idle.sort((a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y)).slice(0, idle.length - keep)
+        const d = Math.hypot(hq.x - target.x, hq.y - target.y) || 1
+        const k = Math.min(12, d * 0.45)
+        const sp = g.pf.nearestWalkable(target.x + ((hq.x - target.x) / d) * k, target.y + ((hq.y - target.y) / d) * k)
+        const stage = sp ? { x: sp.x + 0.5, y: sp.y + 0.5 } : { x: target.x, y: target.y }
+        g.commandMove(go, stage.x, stage.y, true)
+        for (const u of go) this.attackers.add(u.id)
+        this.wave = { ids: go.map((u) => u.id), stage, target, t0: g.time, phase: 'gather' }
+        this.waves++
+        this.waveSize = Math.min(14, this.waveSize + 2)
+        this.nextAttack = g.time + Math.max(45, [150, 110, 80][g.opts.difficulty] - this.waves * 8)
         g.msg('Feindliche Truppen rücken vor!', 'warn')
       }
+    }
+    if (this.wave) {
+      const w = this.wave
+      const live = w.ids.map((id) => g.byId.get(id)).filter((u): u is Ent => !!u && !u.dead)
+      if (!live.length) this.wave = null
+      else if (w.phase === 'gather') {
+        const near = live.filter((u) => Math.hypot(u.x - w.stage.x, u.y - w.stage.y) < 5).length
+        if (near >= live.length * 0.7 || g.time - w.t0 > 45) {
+          const t = w.target.dead ? this.siegeTarget() : w.target
+          if (t) g.commandMove(live, t.x, t.y, true)
+          w.phase = 'go'
+          if (!t) this.wave = null
+        }
+      } else this.wave = null
     }
     // attackers that have arrived look for the next target
     for (const id of this.attackers) {
       const u = g.byId.get(id)
       if (!u) continue
+      if (this.wave?.phase === 'gather' && this.wave.ids.includes(id)) continue
       if (u.order === 'idle' || (u.order === 'amove' && !u.target && !u.path.length && !u.dest)) {
         const t = this.targetBuilding(u)
         if (t) g.commandMove([u], t.x, t.y, true)
@@ -300,6 +330,25 @@ export class AI {
     if (t) g.commandStrike(ready, t, t.x, t.y)
   }
 
+  /** where a wave goes: the enemy's production and command first, the nearest of them to our base */
+  private siegeTarget(): Ent | null {
+    const g = this.g
+    const hq = this.mine('hq')[0] ?? this.mine().find((e) => e.isB)
+    if (!hq) return null
+    const PRIO: Record<string, number> = { factory: 14, barracks: 10, hq: 12, airfield: 8, helipad: 8, shipyard: 6, ref: 9, power: 7, radar: 5 }
+    let best: Ent | null = null
+    let bs = 1e9
+    for (const e of g.ents) {
+      if (e.dead || e.owner === this.p || !e.isB) continue
+      const sc = Math.hypot(e.x - hq.x, e.y - hq.y) - (PRIO[e.key] ?? 0)
+      if (sc < bs) {
+        bs = sc
+        best = e
+      }
+    }
+    return best ?? this.targetBuilding()
+  }
+
   private targetBuilding(from?: Ent): Ent | null {
     const g = this.g
     const hq = from ?? this.mine('hq')[0] ?? this.mine()[0]
@@ -309,7 +358,7 @@ export class AI {
     for (const e of g.ents) {
       if (e.dead || e.owner === this.p) continue
       if (!e.isB && from) continue
-      const d = Math.hypot(e.x - hq.x, e.y - hq.y)
+      const d = Math.hypot(e.x - hq.x, e.y - hq.y) - (from && e.isB && (e.b!.produces || e.key === 'hq') ? 3 : 0)
       if (d < bd) {
         bd = d
         best = e

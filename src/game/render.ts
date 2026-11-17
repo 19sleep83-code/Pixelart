@@ -813,30 +813,68 @@ export class Renderer {
     }
     ctx.globalAlpha = 1
     if (e.jet && e.js !== 'park' && e.z > 3) {
-      // afterburner
-      const tx = -Math.cos(e.dir) * 0.55, ty = -Math.sin(e.dir) * 0.55
-      const q = scr(e.x + tx, e.y + ty, e.z + 2)
-      ctx.fillStyle = '#ff8a30'
-      ctx.fillRect(q.x - 3, q.y - 2, 6, 4)
-      ctx.fillStyle = '#fff2b0'
-      ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
+      // afterburners at the nozzles
+      const bu = art.burner ?? { back: 14, side: 0, z: 2 }
+      const c = Math.cos(e.dir), sn = Math.sin(e.dir)
+      const flick = Math.floor(g.time * 30 + e.id) % 2
+      for (const side of bu.side > 1 ? [-1, 1] : [0]) {
+        const ox = (-c * bu.back - sn * side * bu.side) / 16, oy = (-sn * bu.back + c * side * bu.side) / 16
+        const q = scr(e.x + ox, e.y + oy, e.z + bu.z)
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.drawImage(A.glowOf(5 * P, 'rgba(255,150,60,0.9)'), q.x - 5 * P, q.y - 5 * P)
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.fillStyle = '#ff8a30'
+        ctx.fillRect(q.x - P - flick, q.y - P, 2 * P + flick * 2, 2 * P)
+        ctx.fillStyle = '#fff2b0'
+        ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
+      }
     }
     if (art.rotor) {
-      // two blades turning fast, with a faint blur disc
-      const [dx, dy] = mountOffset([0, 0, art.rotor.z], e.dir)
+      // the main rotor: its blades (4 on the Apache, 5 on the Hind), a blur behind each, a faint disc
+      const R = art.rotor
+      const [dx, dy] = mountOffset([0, 0, R.z], e.dir)
       const cx = s.x + dx, cy = s.y + dy
-      const r = art.rotor.r * P
-      ctx.globalAlpha = 0.16
+      const r = R.r * P * 0.72
+      ctx.globalAlpha = 0.13
       ctx.fillStyle = '#d8dcd0'
       ctx.beginPath()
-      ctx.ellipse(cx, cy, r * 1.35, r * 0.68, 0, 0, Math.PI * 2)
+      ctx.ellipse(cx, cy, r * 1.42, r * 0.71, 0, 0, Math.PI * 2)
+      ctx.fill()
+      const n = R.blades ?? 2
+      const a = (g.time * 23 + e.id) * (e.z > 2 ? 1 : 0.15)
+      const tip = (ang: number) => {
+        const bx = Math.cos(ang) * r, by = Math.sin(ang) * r
+        return [Math.round(cx + bx - by), Math.round(cy + (bx + by) / 2)]
+      }
+      for (let k = 0; k < n; k++) {
+        const ang = a + (k * Math.PI * 2) / n
+        for (const [lag, al] of [[0.32, 0.12], [0.16, 0.25]] as [number, number][]) {
+          ctx.globalAlpha = al
+          const [x1, y1] = tip(ang - lag)
+          this.line(Math.round(cx), Math.round(cy), x1, y1, '#3a3c36', P)
+        }
+        ctx.globalAlpha = 1
+        const [x1, y1] = tip(ang)
+        this.line(Math.round(cx), Math.round(cy), x1, y1, '#24261f', P)
+      }
+      ctx.fillStyle = '#4a4c44'
+      ctx.fillRect(Math.round(cx) - P, Math.round(cy) - P, 2 * P, 2 * P)
+      // the tail rotor, turning in its upright plane at the end of the boom
+      const [tx, ty] = mountOffset([(R.tailSide ?? 1) * 1.3, -R.tail + 1.5, R.z - 2.5], e.dir)
+      const qx = s.x + tx, qy = s.y + ty
+      const ux = Math.cos(e.dir) - Math.sin(e.dir), uy = (Math.cos(e.dir) + Math.sin(e.dir)) / 2
+      const ul = Math.hypot(ux, uy) || 1
+      const rr = 3.2 * P
+      ctx.globalAlpha = 0.18
+      ctx.fillStyle = '#d8dcd0'
+      ctx.beginPath()
+      ctx.ellipse(qx, qy, rr * Math.abs(ux / ul) + 1, rr, 0, 0, Math.PI * 2)
       ctx.fill()
       ctx.globalAlpha = 1
-      const a = g.time * 22 + e.id
       for (const off of [0, Math.PI / 2]) {
-        const bx = Math.cos(a + off) * r, by = Math.sin(a + off) * r
-        const ex = bx - by, ey = (bx + by) / 2
-        this.line(Math.round(cx - ex), Math.round(cy - ey), Math.round(cx + ex), Math.round(cy + ey), '#2a2c28')
+        const at = g.time * 40 + off + e.id
+        const ex = Math.cos(at) * rr * (ux / ul), ey = Math.cos(at) * rr * (uy / ul) - Math.sin(at) * rr
+        this.line(Math.round(qx - ex), Math.round(qy - ey), Math.round(qx + ex), Math.round(qy + ey), '#2a2c28')
       }
     }
   }

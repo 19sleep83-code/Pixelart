@@ -28,7 +28,9 @@ export interface UnitModel {
   /** a soldier taking aim */
   aim?: Vox
   muzzle?: [number, number]
-  rotor?: { r: number; z: number; tail: number }
+  rotor?: { r: number; z: number; tail: number; blades?: number; tailSide?: number }
+  /** a jet's hot nozzles: how far behind the pivot, how far to each side, how high (voxels) */
+  burner?: { back: number; side: number; z: number }
 }
 
 // ─────────────────────────────────────────────────────────── a kit of parts
@@ -138,9 +140,9 @@ function plate(m: Vox, x: number, y: number, z: number, along = true) {
 
 // ─────────────────────────────────────────────────────────── small parts
 
-const ROPE = hex('6e6656')
-const WOOD = hex('6a4a2a')
-const CANVAS = hex('6b6a4c')
+const ROPE = hex('a89a78')
+const WOOD = hex('8a5e32')
+const CANVAS = hex('9a8c5c')
 const TAIL = hex('d03a28')
 const AMBER = hex('ffb43a')
 
@@ -158,21 +160,24 @@ function crew(m: Vox, x: number, y: number, z: number, f: Faction, lid: number) 
   m.dot(x + 1, y + 1.25, z + 2, COL.skin)
   m.dot(x + 0.25, y + 1, z + 2, GUN) // headset
   m.dot(x + 1.25, y + 1, z + 2, GUN)
+  m.dot(x + 0.5, y + 1.5, z + 2.5, shade(s.helmet, 1.35)) // the light on the helmet's rim
+  m.dot(x + 1, y + 1.5, z + 2.5, shade(s.helmet, 1.35))
 }
 
 /** a jerrycan standing on its end */
-function jerrycan(m: Vox, x: number, y: number, z: number, c = hex('4a5634')) {
+function jerrycan(m: Vox, x: number, y: number, z: number, c = hex('2c3620')) {
   m.box(x, y, z, x + 0.5, y + 0.5, z + 1, c)
-  m.dot(x + 0.5, y + 0.5, z + 1.5, shade(c, 0.7))
-  m.dot(x + 0.75, y + 0.5, z + 1.5, shade(c, 0.7))
+  m.dot(x + 0.25, y + 0.75, z + 0.5, shade(c, 1.6)) // the embossed cross catches the light
+  m.dot(x + 0.5, y + 0.5, z + 1.5, hex('8a8e86'))
+  m.dot(x + 0.75, y + 0.5, z + 1.5, hex('8a8e86'))
 }
 
 /** a shovel (and an axe beside it) strapped along y */
 function tools(m: Vox, x: number, y: number, z: number, len = 4) {
   m.rod(x + 0.25, y, z + 0.25, x + 0.25, y + len, z + 0.25, WOOD)
-  m.box(x, y + len, z, x + 0.5, y + len + 0.5, z, GUN_HI)
+  m.box(x, y + len, z, x + 0.5, y + len + 0.5, z, hex('a8aeae'))
   m.rod(x + 0.75, y + 0.5, z + 0.25, x + 0.75, y + len - 1, z + 0.25, WOOD)
-  m.box(x + 0.75, y + len - 1, z, x + 1, y + len - 0.5, z + 0.25, GUN)
+  m.box(x + 0.75, y + len - 1, z, x + 1, y + len - 0.5, z + 0.25, hex('a8aeae'))
 }
 
 /** a braided tow cable along y */
@@ -222,7 +227,7 @@ function mirror(m: Vox, x: number, y: number, z: number) {
 const NAV_RED = hex('ff4a3a'), NAV_GREEN = hex('5aff7a'), NAV_WHITE = hex('fff8e0')
 
 /** a pilot's helmet showing through the canopy */
-function pilot(m: Vox, x: number, y: number, z: number, c = hex('d8d6c8')) {
+function pilot(m: Vox, x: number, y: number, z: number, c = hex('f0eee0')) {
   m.dot(x, y, z, c)
   m.dot(x + 0.5, y, z, c)
   m.dot(x, y + 0.5, z, shade(c, 0.8))
@@ -1153,119 +1158,163 @@ function oreTruck(f: Faction, loaded: boolean): Vox {
 
 // ─────────────────────────────────────────────────────────── helicopters and jets
 
-/** AH-64 Apache: tandem cockpit, chin sensor turret, stub wings with Hellfires, the Longbow dome over the rotor */
+/** AH-64D Apache: a slim angular body, the stepped tandem canopy of flat panels, TADS in the nose, the chain gun under the chin, engines on the shoulders, stub wings with Hellfires and rocket pods, the Longbow radar over the rotor */
 function apache(): UnitModel {
   const s = SCHEMES.nato
-  const c = hex('4a5236')
-  const m = new Vox(20, 38, 14)
-  m.box(8, 8, 2, 11, 27, 6, c) // fuselage
-  m.box(9, 28, 2, 10, 32, 5, c)
-  m.box(9, 33, 2, 10, 33, 3, GUN) // nose sensors
-  m.box(8, 30, 1, 11, 31, 1, GUN) // chin turret
-  m.box(9, 32, 1, 9, 34, 1, GUN) // the 30 mm chain gun
-  // the stepped tandem canopy
-  m.box(9, 28, 6, 10, 31, 7, s.glass)
-  m.box(9, 23, 7, 10, 27, 8, s.glass)
-  m.box(9, 27, 7, 10, 27, 8, c)
-  // engines either side
-  m.cylY(7, 7, 1.6, 13, 20, GUN_HI)
-  m.cylY(12.5, 7, 1.6, 13, 20, GUN_HI)
-  m.set(7, 12, 7, GUN)
-  m.set(12, 12, 7, GUN)
-  // mast with the Longbow radar dome
-  m.box(9, 17, 8, 10, 18, 11, GUN)
-  m.ball(9.5, 17.5, 12.5, 2, 2, 1.2, GUN_HI)
-  // tail boom, fin, tailplane, tail wheel
-  m.box(9, 0, 5, 10, 8, 6, c)
-  m.box(9, 0, 7, 10, 3, 11, c)
-  m.box(6, 1, 5, 13, 2, 5, c)
-  m.set(9, 1, 3, RUBBER)
-  m.set(11, 1, 9, GUN_HI)
-  // stub wings with four Hellfires and a rocket pod each side
-  m.box(2, 17, 5, 17, 19, 5, c)
-  for (const x of [2, 4, 15, 17]) m.box(x, 16, 3, x, 21, 4, GUN_HI)
-  m.box(6, 16, 3, 7, 21, 4, GUN)
-  m.box(12, 16, 3, 13, 21, 4, GUN)
-  // landing gear
-  m.box(7, 25, 0, 7, 25, 1, RUBBER)
-  m.box(12, 25, 0, 12, 25, 1, RUBBER)
-  m.box(8, 12, 6, 8, 13, 6, s.team)
-  m.box(11, 12, 6, 11, 13, 6, s.team)
-  m.set(9, 4, 6, COL.white)
-  // the crew: gunner in front, pilot behind and higher
-  pilot(m, 9.5, 29.5, 7.5)
-  pilot(m, 9.5, 24.5, 8.5)
-  // TADS/PNVS sensor turret with its windows, wire cutters, exhaust suppressors
-  m.box(9, 33.5, 1.5, 10, 33.5, 2, COL.window, true)
-  m.rod(9.75, 31, 8, 9.75, 32.5, 7, GUN_HI)
-  m.rod(9.75, 32, 0.5, 9.75, 33, 1, GUN_HI)
-  for (const x of [6.5, 12.5]) m.box(x, 12, 7.5, x + 0.5, 13, 8, hex('2a2826'))
-  // Hellfire noses, rocket tube ends
-  for (const x of [2, 4, 15, 17]) m.dot(x + 0.25, 21.5, 3.75, hex('b8bcb0'))
-  for (const x of [6, 12]) for (let k = 0; k < 4; k++) m.dot(x + 0.25 + (k % 2) * 0.75, 21.5, 3.25 + (k >> 1) * 0.75, hex('1a1c1a'))
-  // position lights and the beacon
-  navLights(m, 2, 17.5, 18.5, 5.5)
-  m.dot(9.75, 0, 7, NAV_WHITE, true)
-  m.dot(9.75, 9, 7, NAV_RED, true)
-  m.px = 9.5
-  m.py = 18
-  return { hull: m, rotor: { r: 20, z: 12, tail: 16 }, muzzle: [14, 2] }
+  const c = hex('4a5236'), c2 = shade(hex('4a5236'), 0.82), frame = hex('2e3424')
+  const m = new Vox(20, 38, 15)
+  const cx = 10
+  // the body: narrow, flat sides, chamfered top edges
+  for (let y = 13; y <= 31; y += 0.5) {
+    const nose = y > 28 ? (y - 28) / 3 : 0
+    const hw = 1.6 - nose * 0.5
+    m.box(cx - hw, y, 2 + nose * 0.6, cx + hw - 0.5, y, 6 - nose * 1.2, c)
+    m.box(cx - hw + 0.5, y, 6.5 - nose * 1.2, cx + hw - 1, y, 6.5 - nose * 1.2, c2)
+  }
+  // TADS/PNVS in the nose: a turret with its two windows
+  m.box(cx - 1, 31.5, 1.5, cx + 0.5, 33.5, 3.5, hex('3a3e30'))
+  m.box(cx - 0.5, 34, 2, cx, 34, 3, COL.window, true)
+  m.dot(cx - 0.5, 33.5, 4, hex('3a3e30'))
+  // M230 chain gun under the gunner
+  m.box(cx - 0.5, 28, 0.5, cx, 29.5, 1.5, GUN)
+  m.rod(cx - 0.25, 29.5, 1, cx - 0.25, 32, 0.75, GUN)
+  // stepped canopy: gunner low in front, pilot higher behind, flat panels in dark frames
+  m.box(cx - 1, 26.5, 5.5, cx + 0.5, 29.5, 7, s.glass)
+  m.box(cx - 1, 22.5, 6.5, cx + 0.5, 26, 8, s.glass)
+  m.box(cx - 1.5, 26, 5.5, cx + 1, 26, 8, frame)
+  m.box(cx - 1.5, 22, 6.5, cx + 1, 22, 8, frame)
+  m.box(cx - 0.5, 22.5, 8.5, cx, 29.5, 8.5, frame)
+  pilot(m, cx - 0.5, 28, 7.5)
+  pilot(m, cx - 0.5, 24, 8.5)
+  // engines on the shoulders with their exhaust suppressors, the intakes in front
+  for (const ex of [cx - 3, cx + 2.5]) {
+    m.box(ex, 14, 5, ex + 0.5, 22, 7.5, c)
+    m.box(ex, 22, 5.5, ex + 0.5, 22, 7, hex('2a2c22'))
+    m.box(ex - 0.5, 12.5, 5.5, ex + 1, 14, 7, hex('3a3830'))
+    m.dot(ex + 0.25, 12.5, 6, hex('1a1a18'))
+  }
+  // the mast, gearbox fairing and the Longbow radome
+  m.box(cx - 1, 16, 7, cx + 0.5, 21, 9, c2)
+  m.box(cx - 0.5, 18, 9, cx, 18.5, 12, GUN)
+  m.ball(cx - 0.25, 18.25, 13.25, 1.6, 1.6, 0.9, hex('6a7056'))
+  // tail boom, the swept fin with the tail rotor's hub, the stabilator, the tail wheel
+  for (let y = 0; y <= 13; y += 0.5) {
+    const k = y / 13
+    m.box(cx - 0.5 - k * 0.5, y, 4.5, cx + 0.5 * k, y, 5.5 + k, c)
+  }
+  for (let z = 6; z <= 12; z++) m.box(cx - 0.5, 0 + (z - 6) * 0.15, z, cx, 3 - (z - 6) * 0.25, z, c)
+  m.box(cx + 0.5, 1.5, 10, cx + 1, 2, 10.5, GUN) // tail rotor hub (the blades are drawn in the game)
+  m.box(cx - 3.5, 0.5, 5, cx + 3, 2, 5, c)
+  m.rod(cx - 0.25, 1, 4.5, cx - 0.25, 1, 2.5, GUN)
+  m.dot(cx - 0.25, 1, 2, RUBBER)
+  // main wheels on their struts
+  for (const wx of [cx - 3, cx + 2.5]) {
+    m.rod(wx + 0.25, 25, 3, wx + 0.25, 25.5, 1, GUN)
+    m.box(wx, 25, 0, wx + 0.5, 26, 1, RUBBER)
+  }
+  // stub wings with four Hellfires on each outer rail and a 19-shot rocket pod inboard
+  m.box(1, 17.5, 5, 18.5, 20, 5, c2)
+  for (const wx of [1.5, 17]) {
+    m.box(wx - 0.5, 17, 4, wx + 1, 21, 4.5, GUN) // the M299 launcher rail
+    for (let k = 0; k < 4; k++) {
+      const mx = wx - 0.25 + (k % 2) * 0.75, mz = 3 + (k >> 1) * 0.75
+      m.box(mx, 16.5, mz, mx + 0.25, 21, mz + 0.25, hex('8a8e7a'))
+      m.dot(mx, 21.5, mz, hex('c8cab8'))
+    }
+  }
+  for (const px of [5.5, 13.5]) {
+    m.cylY(px, 3.5, 1.1, 16, 21.5, hex('5a6248'))
+    for (let k = 0; k < 3; k++) m.dot(px - 0.5 + k * 0.5, 21.5, 3.5, hex('1a1c1a'))
+  }
+  m.box(cx - 2, 19, 4, cx - 2, 20, 5, s.team)
+  m.box(cx + 1.5, 19, 4, cx + 1.5, 20, 5, s.team)
+  // wire cutters, the antennas, the lights
+  m.rod(cx - 0.25, 29.5, 8, cx - 0.25, 31, 7, GUN_HI)
+  m.rod(cx - 0.25, 30, 1, cx - 0.25, 31.5, 1.5, GUN_HI)
+  navLights(m, 1, 18.5, 18.5, 5.5)
+  m.dot(cx - 0.25, 0, 7, NAV_WHITE, true)
+  m.dot(cx - 0.25, 10, 7, NAV_RED, true)
+  m.px = 9.75
+  m.py = 18.25
+  return { hull: m, rotor: { r: 20, z: 13, tail: 18, blades: 4, tailSide: 1 }, muzzle: [14, 2] }
 }
 
-/** Mi-24 Hind: a big body, the double bubble canopy, troop windows, anhedral stub wings with pods */
+/** Mi-24V Hind: a big round troop cabin, the two bubble canopies one above the other, the engines on top with their intakes, anhedral wings with rocket pods and Shturm rails */
 function hind(): UnitModel {
   const s = SCHEMES.ru
-  const c = hex('6a7046')
-  const c2 = hex('8a8458')
-  const m = new Vox(24, 42, 15)
-  m.box(8, 8, 2, 15, 30, 9, c) // the cabin
-  m.box(9, 31, 2, 14, 36, 6, c)
-  m.box(10, 37, 2, 13, 37, 4, s.glass) // gunner's bubble
-  m.box(9, 33, 6, 14, 35, 7, s.glass)
-  m.box(10, 30, 9, 13, 31, 10, s.glass) // pilot's bubble
-  m.box(10, 37, 1, 11, 38, 1, GUN) // the nose gun
-  for (let y = 12; y <= 24; y += 4) {
-    m.set(7, y, 6, s.glass)
-    m.set(16, y, 6, s.glass)
+  const c = hex('6a7046'), c2 = hex('8a8458'), belly = hex('9aaab4')
+  const m = new Vox(24, 42, 16)
+  const cx = 11.5
+  // the cabin: round in section, a pale belly
+  m.cylY(cx, 5.5, 3.6, 9, 29, c)
+  m.box(cx - 3.5, 9, 1.5, cx + 3.5, 29, 2.5, belly)
+  // the nose: the gunner's bubble low in front, the pilot's above and behind
+  for (let y = 29; y <= 36; y += 0.5) {
+    const k = (y - 29) / 7
+    m.cylY(cx, 4.5 - k, 3.4 - k * 1.8, y, y + 0.5, c)
   }
-  m.box(8, 16, 10, 15, 26, 11, c2) // engines
-  m.box(8, 16, 12, 15, 17, 12, GUN) // intakes
-  m.box(11, 20, 12, 12, 21, 13, GUN)
-  m.box(11, 0, 6, 12, 8, 8, c) // tail boom
-  m.box(11, 0, 9, 12, 3, 14, c)
-  m.box(13, 1, 12, 13, 1, 12, GUN_HI)
-  // wings bending down to the pods
-  for (const [x, z] of [[1, 6], [3, 6], [4, 7], [5, 7], [6, 7], [17, 7], [18, 7], [19, 7], [20, 6], [22, 6]] as [number, number][]) m.box(x, 18, z, x, 21, z, c2)
-  m.box(0, 17, 4, 2, 23, 5, GUN_HI)
-  m.box(21, 17, 4, 23, 23, 5, GUN_HI)
-  m.box(4, 18, 5, 5, 22, 6, GUN)
-  m.box(18, 18, 5, 19, 22, 6, GUN)
-  m.box(9, 28, 0, 9, 28, 1, RUBBER)
-  m.box(14, 28, 0, 14, 28, 1, RUBBER)
-  m.box(11, 10, 0, 12, 10, 1, RUBBER)
-  m.paint((x, y, z, cc) => (cc === c && valueNoise(x, y + z, 4, 63) > 0.62 ? c2 : cc))
-  m.box(8, 14, 9, 8, 16, 9, s.team)
-  m.box(15, 14, 9, 15, 16, 9, s.team)
-  pilot(m, 11.5, 34, 7.5)
-  pilot(m, 11.5, 30.5, 10.5)
-  // Shturm missile rails at the wing tips, the IR jammer, exhaust soot, the sensor pod
-  m.rod(0.5, 16, 6.5, 0.5, 23, 6.5, GUN_HI)
-  m.rod(23, 16, 6.5, 23, 23, 6.5, GUN_HI)
-  m.box(11, 12, 12, 12, 13, 13, hex('3a3a36'))
-  m.dot(11.5, 12.5, 13.5, hex('ff7a3a'), true)
-  for (const x of [7.5, 15.5]) m.box(x, 14, 10, x + 0.5, 15, 11, hex('2a2826'))
-  m.box(12, 37, 1, 13, 37.5, 1.5, COL.window, true)
-  for (let k = 0; k < 4; k++) {
-    m.dot(0.5 + (k % 2), 23.5, 4.25 + (k >> 1) * 0.75, hex('1a1c1a'))
-    m.dot(21.5 + (k % 2), 23.5, 4.25 + (k >> 1) * 0.75, hex('1a1c1a'))
+  m.ball(cx, 35, 4.5, 1.8, 2, 1.6, s.glass)
+  m.ball(cx, 30.5, 8, 1.7, 1.9, 1.3, s.glass)
+  pilot(m, cx - 0.5, 35, 5.5)
+  pilot(m, cx - 0.5, 30.5, 9)
+  // the gun turret under the nose, sensor pods, the pitot boom
+  m.ball(cx, 36, 1.5, 1, 1, 0.8, GUN)
+  m.rod(cx, 36.5, 1.5, cx, 39, 1.25, GUN)
+  m.box(cx + 1.5, 34, 2, cx + 2.5, 35.5, 3, hex('3a3e30'))
+  m.rod(cx - 1.5, 36, 5, cx - 1.5, 40, 5, GUN_HI)
+  // engines on the roof: intakes with dust filters forward, exhausts turned out at the back
+  for (const ex of [cx - 2, cx + 2]) {
+    m.cylY(ex, 9.5, 1.5, 13, 25, c2)
+    m.cylY(ex, 9.5, 1.2, 25, 26, hex('3a3a34'))
+    m.dot(ex, 26.5, 9.5, hex('1a1a18'))
+    m.box(ex + (ex < cx ? -2 : 1), 12, 8.5, ex + (ex < cx ? -1 : 2), 13, 10, hex('2a2826'))
   }
-  navLights(m, 0, 23.5, 20, 7)
-  m.dot(11.75, 0, 9, NAV_WHITE, true)
-  m.dot(11.75, 8, 9, NAV_RED, true)
-  m.px = 11.5
-  m.py = 20
-  return { hull: m, rotor: { r: 22, z: 13, tail: 18 }, muzzle: [16, 2] }
+  m.box(cx - 1, 14, 11, cx + 1, 21, 12, c2) // the gearbox hump
+  m.box(cx - 0.5, 17.5, 12, cx, 18, 13.5, GUN) // the mast
+  m.box(cx - 0.5, 11, 11, cx, 12.5, 12, hex('3a3a36')) // IR jammer
+  m.dot(cx - 0.25, 11.75, 12.5, hex('ff7a3a'), true)
+  // troop windows along the cabin, the door
+  for (let y = 12; y <= 24; y += 3) {
+    m.box(cx - 3.75, y, 5.5, cx - 3.75, y + 1, 6.5, s.glass)
+    m.box(cx + 3.25, y, 5.5, cx + 3.25, y + 1, 6.5, s.glass)
+  }
+  m.box(cx + 3.25, 17.5, 3, cx + 3.25, 20.5, 7, shade(c, 0.85))
+  // the tapering tail boom, the fin, the tailplane
+  for (let y = 0; y <= 9; y += 0.5) {
+    const k = y / 9
+    m.box(cx - 0.75 - k, y, 6 - k, cx + 0.25 + k, y, 7.5, c)
+  }
+  for (let z = 7; z <= 14; z++) m.box(cx - 0.5, 0.5 + (z - 7) * 0.3, z, cx, 3.5 - (z - 7) * 0.2, z, c)
+  m.box(cx - 1.5, 1.5, 12, cx - 1, 2, 12.5, GUN) // tail rotor hub, on the left
+  m.box(cx - 4, 2, 6.5, cx + 3.5, 3.5, 6.5, c)
+  // anhedral stub wings: two pylons each with UB-32 pods, Shturm rails at the tips
+  for (const side of [-1, 1]) {
+    for (let k = 0; k <= 8; k += 0.5) m.box(cx + side * (3.5 + k) - 0.25, 18, 7 - k * 0.2, cx + side * (3.5 + k) + 0.25, 21.5, 7 - k * 0.2, c2)
+    for (const off of [5, 8]) {
+      const px = cx + side * off
+      m.cylY(px, 4.5, 1.1, 16.5, 22, hex('6a6e6a'))
+      for (let k = 0; k < 3; k++) m.dot(px - 0.5 + k * 0.5, 22, 4.5, hex('1a1c1a'))
+    }
+    const tx = cx + side * 11.5
+    m.box(tx - 0.25, 16, 4.5, tx + 0.25, 23, 5.5, GUN_HI)
+    for (const z of [4.5, 5.5]) m.dot(tx, 23.5, z, hex('c8cab8'))
+  }
+  // retractable gear: nose wheels, main wheels
+  m.box(cx - 1, 33, 0, cx + 0.5, 33.5, 1, RUBBER)
+  m.box(cx - 3.5, 22, 0, cx - 3, 23, 1.5, RUBBER)
+  m.box(cx + 3, 22, 0, cx + 3.5, 23, 1.5, RUBBER)
+  // camouflage on top
+  m.paint((x, y, z, cc) => (cc === c && valueNoise(x, y + z, 4, 63) > 0.6 ? c2 : cc))
+  m.box(cx - 3.75, 26, 6, cx - 3.75, 27, 7, s.team)
+  m.box(cx + 3.25, 26, 6, cx + 3.25, 27, 7, s.team)
+  navLights(m, 0, 23.5, 19.5, 5)
+  m.dot(cx, 0.5, 8, NAV_WHITE, true)
+  m.dot(cx, 8, 9, NAV_RED, true)
+  m.px = 11.25
+  m.py = 19.75
+  return { hull: m, rotor: { r: 22, z: 13.5, tail: 18, blades: 5, tailSide: -1 }, muzzle: [16, 2] }
 }
+
 
 /** Eurofighter: delta wing, canards, one fin */
 function eurofighter(): Vox {
@@ -1911,11 +1960,11 @@ export function unitModel(key: string, f: Faction): UnitModel {
     case 'heli':
       return nato ? apache() : hind()
     case 'jet':
-      return { hull: nato ? eurofighter() : su34(), muzzle: [10, 0] }
+      return { hull: nato ? eurofighter() : su34(), muzzle: [10, 0], burner: nato ? { back: 16, side: 0.5, z: 2.5 } : { back: 16, side: 4, z: 2.5 } }
     case 'fighter':
-      return { hull: nato ? eurofighter() : su35(), muzzle: [10, 0] }
+      return { hull: nato ? eurofighter() : su35(), muzzle: [10, 0], burner: nato ? { back: 16, side: 0.5, z: 2.5 } : { back: 17.5, side: 4, z: 2 } }
     case 'cas':
-      return { hull: nato ? a10() : su25(), muzzle: [12, 1] }
+      return { hull: nato ? a10() : su25(), muzzle: [12, 1], burner: nato ? { back: 14, side: 4, z: 6 } : { back: 9.5, side: 3, z: 2.5 } }
     case 'boat':
       return patrolBoat(f)
     case 'corvette': {
