@@ -41,6 +41,13 @@ var dead := false
 # moving
 var path := PackedInt32Array()
 var pi := 0
+## its path is still being worked out (Game.set_dest_later)
+var path_wait := false
+# the last path request (start and goal tile, map version) and its answer
+var pm_from := -1
+var pm_to := -1
+var pm_ver := -1
+var pm_path := PackedInt32Array()
 ## Vector2 or null
 var dest: Variant = null
 ## idle | move | attack | amove | harvest | board | unload | strike | enter | capture

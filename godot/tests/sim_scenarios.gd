@@ -9,6 +9,7 @@ const DT := 1.0 / 30.0
 
 var _fails := 0
 var _passes := 0
+var _games: Array[Game] = []
 
 
 func run(_args: PackedStringArray) -> void:
@@ -18,8 +19,16 @@ func run(_args: PackedStringArray) -> void:
 	_landing()
 	_jets()
 	_carrier()
+	for g in _games:
+		g.dispose()
 	print("%d PASS, %d FAIL" % [_passes, _fails])
 	print("ALL PASS" if _fails == 0 else "SOME FAILED")
+
+
+func _new_game(opts: Dictionary) -> Game:
+	var g := Game.new(opts)
+	_games.append(g)
+	return g
 
 
 func _check(ok: bool, what: String, detail: String = "") -> void:
@@ -48,14 +57,14 @@ func _hq(g: Game, p: int) -> Ent:
 
 
 ## a building of `key` placed (and finished) near a point, searching outward
-func _place(g: Game, owner: int, key: String, cx: int, cy: int, r0: int = 2, r1: int = 14) -> Ent:
+func _place(g: Game, who: int, key: String, cx: int, cy: int, r0: int = 2, r1: int = 14) -> Ent:
 	for r in range(r0, r1):
 		for dy in range(-r, r + 1):
 			for dx in range(-r, r + 1):
 				if maxi(absi(dx), absi(dy)) != r:
 					continue
 				if g.can_place(0, key, cx + dx, cy + dy):
-					var b := g.add_building(owner, key, cx + dx, cy + dy)
+					var b := g.add_building(who, key, cx + dx, cy + dy)
 					b.built = 1.0
 					g.update_power()
 					return b
@@ -71,7 +80,7 @@ func _clear_units(g: Game, p: int) -> void:
 
 func _houses() -> void:
 	print("-- house")
-	var g := Game.new({"seed": 777, "faction": "nato", "difficulty": 1, "mapType": "land"})
+	var g := _new_game({"seed": 777, "faction": "nato", "difficulty": 1, "mapType": "land"})
 	g.reveal = true
 	g.update_fog()
 	var hq := _hq(g, 0)
@@ -141,9 +150,12 @@ func _houses() -> void:
 	# cover: only 30% of the damage reaches them
 	if h.occ.size() > 0:
 		var u := h.occ[0]
+		var rank := u.rank
+		u.rank = 0
 		u.hp = 1000.0
 		u.max_hp = 1000.0
 		g.damage(u, 100.0, "mg", 1)
+		u.rank = rank
 		var lost := 1000.0 - u.hp
 		_check(lost >= 100 * 0.9 * g.cover - 0.01 and lost <= 100 * 1.1 * g.cover + 0.01, "cover: %.0f%% of the damage gets through" % (g.cover * 100), "lost %.1f of 100" % lost)
 		u.hp = 55.0
@@ -159,7 +171,7 @@ func _houses() -> void:
 
 func _bunker() -> void:
 	print("-- bunker")
-	var g := Game.new({"seed": 777, "faction": "nato", "difficulty": 1, "mapType": "land"})
+	var g := _new_game({"seed": 777, "faction": "nato", "difficulty": 1, "mapType": "land"})
 	g.reveal = true
 	var hq := _hq(g, 0)
 	var bk := _place(g, 0, "bunker", hq.tx, hq.ty)
@@ -189,7 +201,7 @@ func _bunker() -> void:
 
 func _capture() -> void:
 	print("-- engineer")
-	var g := Game.new({"seed": 777, "faction": "nato", "difficulty": 1, "mapType": "land"})
+	var g := _new_game({"seed": 777, "faction": "nato", "difficulty": 1, "mapType": "land"})
 	var hq := _hq(g, 0)
 	var pw := _place(g, 1, "power", hq.tx, hq.ty, 4, 14)
 	_check(pw != null, "an enemy power plant stands near our base")
@@ -211,7 +223,7 @@ func _capture() -> void:
 
 func _landing() -> void:
 	print("-- landing ship")
-	var g := Game.new({"seed": 4242, "faction": "nato", "difficulty": 1, "mapType": "coast"})
+	var g := _new_game({"seed": 4242, "faction": "nato", "difficulty": 1, "mapType": "coast"})
 	g.reveal = true
 	var hq := _hq(g, 0)
 	var yard := _place(g, 0, "shipyard", hq.tx, hq.ty, 2, 22)
@@ -227,6 +239,7 @@ func _landing() -> void:
 	g.command_board(troops, lander)
 	var t := _step(g, 90, func() -> bool: return lander.passengers.size() == troops.size())
 	_check(lander.passengers.size() == troops.size(), "%d units board the landing ship" % troops.size(), "aboard %d after %.1f s" % [lander.passengers.size(), t])
+	_step(g, 0.1)
 	var carried := true
 	for u in troops:
 		carried = carried and u.carried_by == lander and Rng.hypot(u.x - lander.x, u.y - lander.y) < 0.01
@@ -269,7 +282,7 @@ func _landing() -> void:
 
 func _jets() -> void:
 	print("-- jets")
-	var g := Game.new({"seed": 11, "faction": "nato", "difficulty": 1, "mapType": "land"})
+	var g := _new_game({"seed": 11, "faction": "nato", "difficulty": 1, "mapType": "land"})
 	g.reveal = true
 	var hq := _hq(g, 0)
 	var af := _place(g, 0, "airfield", hq.tx, hq.ty, 3, 12)
@@ -325,7 +338,7 @@ func _jets() -> void:
 
 func _carrier() -> void:
 	print("-- carrier")
-	var g := Game.new({"seed": 4242, "faction": "nato", "difficulty": 1, "mapType": "coast"})
+	var g := _new_game({"seed": 4242, "faction": "nato", "difficulty": 1, "mapType": "coast"})
 	g.reveal = true
 	g.update_fog()
 	var hq := _hq(g, 0)

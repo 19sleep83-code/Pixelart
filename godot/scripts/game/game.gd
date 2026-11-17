@@ -27,6 +27,8 @@ const FX_EMBER := 11
 const FX_SMOKE := 1
 const OFF: Array[Vector2] = [Vector2(0.5, 0.5), Vector2(0.25, 0.3), Vector2(0.75, 0.7), Vector2(0.3, 0.75)]
 const DIRS4: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+## the path search limit for goals that cannot be reached (see _max_nodes)
+const UNREACHABLE_NODES := 600
 
 
 ## what can be held by soldiers: a village house, the church, a barn, or a bunker of our own
@@ -242,11 +244,25 @@ var _spotted_within := 2.2
 var _ai_prod: Array = [0.8, 1, 1.25]
 var _ai_income: Array = [0.75, 1, 1.3]
 
+## time per tick for the paths of big orders (set_dest_later), microseconds
+var path_budget_us := 3000
+## and for units chasing a target; past it they repath a tick later
+var chase_budget_us := 3000
+# path finding time spent in this tick
+var _path_us := 0
+# changes whenever a building goes up or comes down (what ground units can cross)
+var _map_ver := 0
+var _comp_land := PackedInt32Array()
+var _comp_ver := -1
+var _comp_sea := PackedInt32Array()
+
 # damage table by class and armour index
 var _vs := PackedFloat64Array()
 # buildings (alive or dead until the next sweep), for fast lookups
 var _blds: Array[Ent] = []
 var _fx_pool: Array[Fx] = []
+var _pq: Array[Ent] = []
+var _pq_goal := PackedVector2Array()
 var _lit := PackedInt32Array()
 var _fog_full := true
 # what each side sees, snapshotted at the start of a tick: position, sight, flags (1 building, 2 inside)
@@ -645,6 +661,7 @@ func add_building(owner: int, key: String, tx: int, ty: int) -> Ent:
 	for y in range(ty, ty + e.h):
 		for x in range(tx, tx + e.w):
 			map.bld[map.idx(x, y)] = e.id
+	_map_ver += 1
 	ents.append(e)
 	by_id[e.id] = e
 	_blds.append(e)
@@ -998,7 +1015,7 @@ func _go(list: Array[Ent], slots: Array[Vector2], x: float, y: float, attack_mov
 	for i in list.size():
 		var u := list[i]
 		var s := slots[i] if i < slots.size() else Vector2(x, y)
-		set_dest(u, s.x, s.y)
+		set_dest_later(u, s.x, s.y)
 		u.order = "amove" if attack_move else "move"
 		if attack_move:
 			u.amove = s
@@ -1097,8 +1114,22 @@ func pf_of(u: Ent) -> PathFinder:
 
 func set_dest(u: Ent, x: float, y: float) -> void:
 	var pfn := npf if u.is_naval else pf
+	u.path_wait = false
 	u.dest = Vector2(x, y)
-	u.path = pfn.find(floori(u.x), floori(u.y), floori(x), floori(y))
+	var from := map.idx(floori(u.x), floori(u.y))
+	var to := map.idx(floori(x), floori(y))
+	if u.pm_from == from and u.pm_to == to and u.pm_ver == _map_ver:
+		# the same request as last time on the same map: the same answer (a unit that cannot get
+		# closer to its target asks every tick)
+		u.path = u.pm_path
+	else:
+		var t0 := Time.get_ticks_usec()
+		u.path = pfn.find(floori(u.x), floori(u.y), floori(x), floori(y), _max_nodes(u.is_naval, from, floori(x), floori(y)))
+		_path_us += Time.get_ticks_usec() - t0
+		u.pm_from = from
+		u.pm_to = to
+		u.pm_ver = _map_ver
+		u.pm_path = u.path
 	u.pi = 0
 	u.repaths = 0
 	u.stuck_t = 0.0
@@ -1112,6 +1143,122 @@ func set_dest(u: Ent, x: float, y: float) -> void:
 		u.dest = Vector2((last % map.N) + 0.5, (last / map.N) + 0.5)
 	else:
 		u.dest = null
+
+
+## How far the path finder may search. A goal the unit cannot reach at all (another island, the
+## far side of the water) makes it search everything it can reach for the closest point, up to
+## 6000 tiles: fast enough in the browser, but ~20 ms here, and a chasing unit asks every second.
+## Such searches stop after UNREACHABLE_NODES; reachable goals get the full search as before.
+func _max_nodes(naval: bool, from: int, gx: int, gy: int) -> int:
+	var N := map.N
+	gx = clampi(gx, 0, N - 1)
+	gy = clampi(gy, 0, N - 1)
+	var comp := _components(naval)
+	var to := map.idx(gx, gy)
+	if comp[to] < 0:
+		var w := (npf if naval else pf).nearest_walkable(gx + 0.5, gy + 0.5)
+		if w.x < 0:
+			return 6000
+		to = map.idx(w.x, w.y)
+	if comp[from] < 0 or comp[from] == comp[to]:
+		return 6000
+	return UNREACHABLE_NODES
+
+
+## which connected piece of land (or water) each tile belongs to, -1 where nothing can go
+func _components(naval: bool) -> PackedInt32Array:
+	if naval:
+		if _comp_sea.is_empty():
+			_comp_sea = _label(true)
+		return _comp_sea
+	if _comp_ver != _map_ver:
+		_comp_land = _label(false)
+		_comp_ver = _map_ver
+	return _comp_land
+
+
+func _label(naval: bool) -> PackedInt32Array:
+	var m := map
+	var N := m.N
+	var n := N * N
+	var comp := PackedInt32Array()
+	comp.resize(n)
+	var ter := m.ter
+	var block := m.block
+	var bld := m.bld
+	for i in n:
+		var ok := (ter[i] == GameMap.WATER or ter[i] == GameMap.BRIDGE) if naval else (block[i] == 0 and bld[i] == 0)
+		comp[i] = -2 if ok else -1
+	var stack := PackedInt32Array()
+	var label := 0
+	for i in n:
+		if comp[i] != -2:
+			continue
+		comp[i] = label
+		stack.append(i)
+		while not stack.is_empty():
+			var c := stack[stack.size() - 1]
+			stack.resize(stack.size() - 1)
+			var cx := c % N
+			if cx > 0 and comp[c - 1] == -2:
+				comp[c - 1] = label
+				stack.append(c - 1)
+			if cx < N - 1 and comp[c + 1] == -2:
+				comp[c + 1] = label
+				stack.append(c + 1)
+			if c >= N and comp[c - N] == -2:
+				comp[c - N] = label
+				stack.append(c - N)
+			if c < n - N and comp[c + N] == -2:
+				comp[c + N] = label
+				stack.append(c + N)
+		label += 1
+	return comp
+
+
+## set_dest for orders to many units at once: the unit gets its goal now and its path within the
+## next ticks (the path finder is slow in GDScript, so a big order is spread over a few ticks).
+## Until then it stands still with `dest` set and an empty `path`.
+func set_dest_later(u: Ent, x: float, y: float) -> void:
+	u.dest = Vector2(x, y)
+	u.path = PackedInt32Array()
+	u.pi = 0
+	u.repaths = 0
+	u.stuck_t = 0.0
+	u.path_wait = true
+	_pq.append(u)
+	_pq_goal.append(Vector2(x, y))
+
+
+## works through the waiting path requests: at least one, then as many as fit in the budget
+func _run_paths() -> void:
+	if _pq.is_empty():
+		return
+	var t0 := Time.get_ticks_usec()
+	var k := 0
+	var last := 0
+	while k < _pq.size():
+		var u := _pq[k]
+		var goal := _pq_goal[k]
+		if u.path_wait and not u.dead and u.dest == goal and u.path.is_empty():
+			# another one only if it is likely to fit (paths across the map take a few ms)
+			var now := Time.get_ticks_usec()
+			if k > 0 and now - t0 + last > path_budget_us:
+				break
+			set_dest(u, goal.x, goal.y)
+			last = Time.get_ticks_usec() - now
+		k += 1
+	if k >= _pq.size():
+		_pq.clear()
+		_pq_goal.clear()
+	else:
+		_pq = _pq.slice(k)
+		_pq_goal = _pq_goal.slice(k)
+
+
+## is there time left for another path this tick (for repaths that can wait a tick)
+func _path_room() -> bool:
+	return _path_us < path_budget_us + chase_budget_us
 
 
 func command_attack(units: Array, t: Ent) -> void:
@@ -1354,7 +1501,9 @@ func update(dt: float) -> void:
 	time += dt
 	_tick += 1
 	_in_update = true
+	_path_us = 0
 	_produce(dt)
+	_run_paths()
 	_build_spatial()
 	_snap_sight()
 	var i := 0
@@ -1378,6 +1527,8 @@ func update(dt: float) -> void:
 			if k != j:
 				ents[k] = e
 			k += 1
+		else:
+			_forget(e)
 	if k != n:
 		ents.resize(k)
 		var kb := 0
@@ -1426,6 +1577,43 @@ func update(dt: float) -> void:
 				if not harv:
 					pl.credits += _trickle
 	_in_update = false
+
+
+## a dead one lets go of the others, so no ring of references keeps it in memory
+static func _forget(e: Ent) -> void:
+	e.target = null
+	e.last_attacker = null
+	e.board_on = null
+	e.carried_by = null
+	e.capture_b = null
+	e.enter_g = null
+	e.inside = null
+	e.strike = null
+	e.passengers.clear()
+
+
+## Lets go of everything, for a battle that is thrown away (RefCounted objects that point at each
+## other would otherwise stay in memory). The game cannot be used afterwards.
+func dispose() -> void:
+	for e in ents:
+		_forget(e)
+	for g in garrisons:
+		g.occ.clear()
+		g.b = null
+	for s in shots:
+		s.target = null
+	ents.clear()
+	_list = []
+	_blds.clear()
+	by_id.clear()
+	g_at.clear()
+	garrisons.clear()
+	shots.clear()
+	fx.clear()
+	_fx_pool.clear()
+	_pq.clear()
+	_jh_b = null
+	on_sound = Callable()
 
 
 func _update_building(b: Ent, dt: float) -> void:
@@ -1605,7 +1793,8 @@ func _update_unit(u: Ent, dt: float) -> void:
 		var d := dist(u, t)
 		if d > u.w_range:
 			u.repath_t -= dt
-			if u.repath_t <= 0 or (u.path.is_empty() and not u.is_air):
+			# (a ground unit waits a tick when this tick's path finding is used up)
+			if (u.repath_t <= 0 or (u.path.is_empty() and not u.is_air)) and (u.is_air or _path_room()):
 				u.repath_t = 1.2
 				if u.is_air:
 					u.dest = Vector2(t.x, t.y)
@@ -1614,7 +1803,7 @@ func _update_unit(u: Ent, dt: float) -> void:
 		elif u.w_min > 0 and d < u.w_min and not u.is_air:
 			# too close for artillery: back off
 			u.repath_t -= dt
-			if u.repath_t <= 0:
+			if u.repath_t <= 0 and _path_room():
 				u.repath_t = 1.5
 				var a := atan2(u.y - t.y, u.x - t.x)
 				set_dest(u, u.x + cos(a) * 3, u.y + sin(a) * 3)
@@ -2885,6 +3074,7 @@ func remove_building(e: Ent, destroyed: bool) -> void:
 		for x in range(e.tx, e.tx + e.w):
 			if map.bld[map.idx(x, y)] == e.id:
 				map.bld[map.idx(x, y)] = 0
+	_map_ver += 1
 	if destroyed:
 		# a chain of blasts through the building, then the big one
 		var n := 2 + e.w * 2
