@@ -13,6 +13,12 @@ var roads: TileMapLayer
 var marks: Node2D
 var _coords := {}  # tile key -> atlas coords
 var _source := 0
+## the shadows of trees and houses and the marks of the fighting, in pieces of CHUNK × CHUNK tiles
+const CHUNK := 16
+var _shadow_items: Array[RID] = []
+var _mark_items: Array[RID] = []
+var _mark_list: Array = []  # per chunk: Array of [Sheet, frame, Vector2]
+var _cn := 1
 
 
 func setup(m: GameMap) -> void:
@@ -44,6 +50,69 @@ func setup(m: GameMap) -> void:
 	marks = Node2D.new()
 	add_child(marks)
 	repaint_all()
+	_bake_marks()
+
+
+func _exit_tree() -> void:
+	for r in _shadow_items + _mark_items:
+		RenderingServer.free_rid(r)
+	_shadow_items.clear()
+	_mark_items.clear()
+
+
+func _chunk_of(x: float, y: float) -> int:
+	var cx := clampi(int(floorf(x / CHUNK)), 0, _cn - 1)
+	var cy := clampi(int(floorf(y / CHUNK)), 0, _cn - 1)
+	return cy * _cn + cx
+
+
+## the shadows of trees and houses lie on the ground (baked once); marks of the fighting go above them
+func _bake_marks() -> void:
+	Art.load_all()
+	_cn = int(ceilf(map.N / float(CHUNK)))
+	var parent := marks.get_canvas_item()
+	for layer in 2:
+		for c in _cn * _cn:
+			var ci := RenderingServer.canvas_item_create()
+			RenderingServer.canvas_item_set_parent(ci, parent)
+			RenderingServer.canvas_item_set_draw_index(ci, layer * _cn * _cn + c)
+			if layer == 0:
+				_shadow_items.append(ci)
+			else:
+				_mark_items.append(ci)
+				_mark_list.append([])
+	for s in map.statics:
+		var arr: Array = Art.statics.get(s["kind"], [])
+		if arr.is_empty():
+			continue
+		var sh: Sheet = arr[int(s["v"]) % arr.size()][1]
+		if sh == null:
+			continue
+		var x := float(s["x"])
+		var y := float(s["y"])
+		sh.draw(_shadow_items[_chunk_of(x, y)], 0, Rng.js_round((x - y) * 32.0), Rng.js_round((x + y) * 16.0))
+
+
+## paint a mark onto the ground at a world position (tiles); it stays
+func stamp(kind: String, size: int, x: float, y: float) -> void:
+	var sh: Sheet = Art.scorch if kind == "scorch" else Art.rubble
+	if sh == null:
+		return
+	var fr := clampi(size if kind == "scorch" else maxi(0, size - 1), 0, sh.n - 1)
+	var c := _chunk_of(x, y)
+	var pos := Vector2(Rng.js_round((x - y) * 32.0), Rng.js_round((x + y) * 16.0))
+	var list: Array = _mark_list[c]
+	list.append([sh, fr, pos])
+	var ci := _mark_items[c]
+	if list.size() > 400:
+		# too many on one piece of ground: forget the oldest
+		list = list.slice(list.size() - 300)
+		_mark_list[c] = list
+		RenderingServer.canvas_item_clear(ci)
+		for m in list:
+			m[0].draw(ci, m[1], m[2].x, m[2].y)
+	else:
+		sh.draw(ci, fr, pos.x, pos.y)
 
 
 func repaint_all() -> void:
