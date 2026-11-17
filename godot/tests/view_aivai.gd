@@ -2,7 +2,8 @@ extends Node
 ## The computer against itself with the world drawn every tick, to catch errors in the renderer and
 ## to measure it:
 ##   xvfb-run -a -s "-screen 0 1600x900x24" godot --path godot --rendering-driver opengl3 \
-##     res://tests/runner.tscn -- view_aivai [minutes=3] [seed:map=7:coast] [zoom level=1] [shots dir]
+##     res://tests/runner.tscn -- view_aivai [minutes=3] [seed:map=7:coast] [zoom level=1] [shots dir] [warm-up minutes=0]
+## (the warm-up is simulated without drawing, to get to the fighting sooner; the fog is off)
 ##   … -- view_aivai stress [per side=75] [seed:map=4242:land] [zoom level=1] [seconds=20] [shots dir]
 ## Prints the time the world takes to fill its layers (redraw, CPU) and the whole frame (wall clock,
 ## with the GPU work of the previous frame), every 30 s and at the end.
@@ -27,11 +28,19 @@ func run(args: PackedStringArray) -> void:
 	var sm := (args[1] if args.size() > 1 else "7:coast").split(":")
 	var zl := int(args[2]) if args.size() > 2 else 1
 	var shots: String = args[3] if args.size() > 3 else ""
+	var warm := float(args[4]) if args.size() > 4 else 0.0
 	_make({"seed": int(sm[0]), "faction": "nato", "difficulty": 2, "mapType": sm[1], "tod": "dusk", "weather": "clouds"}, zl)
 	var a0 := AI.new(game)
 	a0.p = 0
 	game.players[0].ai = true
 	ais = [a0, AI.new(game)]
+	game.reveal = true
+	for i in int(warm * 60 * 30):
+		game.update(STEP)
+		for a in ais:
+			a.update(STEP)
+	if warm > 0:
+		print("warm-up done at %.0f s" % game.time)
 	var focus := Vector2(game.map.N / 2.0, game.map.N / 2.0)
 	var cam := focus
 	var next := 0.0
@@ -58,7 +67,7 @@ func run(args: PackedStringArray) -> void:
 		t_last = t2
 		if (i + 1) % (30 * 30) == 0:
 			_report("%d:%02d" % [int(game.time) / 60, int(game.time) % 60])
-			if shots != "":
+			if shots != "" and shots != "-":
 				get_viewport().get_texture().get_image().save_png(shots.path_join("aivai_%03d.png" % int(game.time)))
 		if game.over != 0:
 			print("game over: ", game.over, " at ", game.time)
@@ -183,7 +192,7 @@ func _stress(args: PackedStringArray) -> void:
 		var t2 := Time.get_ticks_usec()
 		_frame.append((t2 - t_last) / 1000.0)
 		t_last = t2
-		if i == 90 and shots != "":
+		if i == 90 and shots != "" and shots != "-":
 			get_viewport().get_texture().get_image().save_png(shots.path_join("stress.png"))
 		if (i + 1) % 150 == 0:
 			_report("%.0f s" % game.time)

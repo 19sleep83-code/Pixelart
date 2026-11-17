@@ -27,6 +27,46 @@ const C_HOVER := Color("#d8ffd0")
 const C_FOE := Color("#ff5a4a")
 const C_BAR_BG := Color("#0c0e0a")
 const C_GOLD := Color("#e0b532")
+# colours used while drawing
+const K_141A12 := Color("#141a12")
+const K_1A1C18 := Color("#1a1c18")
+const K_24261F := Color("#24261f")
+const K_2A2622 := Color("#2a2622")
+const K_2A2A28 := Color("#2a2a28")
+const K_2A2C28 := Color("#2a2c28")
+const K_2E261E := Color("#2e261e")
+const K_3A3C36 := Color("#3a3c36")
+const K_3A3E34 := Color("#3a3e34")
+const K_4A3A28 := Color("#4a3a28")
+const K_4A4C44 := Color("#4a4c44")
+const K_5FD65A := Color("#5fd65a")
+const K_6A5438 := Color("#6a5438")
+const K_8A7252 := Color("#8a7252")
+const K_9CFF8A := Color("#9cff8a")
+const K_B8D4E0 := Color("#b8d4e0")
+const K_C8DDE2 := Color("#c8dde2")
+const K_D8DCD0 := Color("#d8dcd0")
+const K_D8DCD8 := Color("#d8dcd8")
+const K_D8EEF4 := Color("#d8eef4")
+const K_E2492F := Color("#e2492f")
+const K_E8C03A := Color("#e8c03a")
+const K_E8E2D0 := Color("#e8e2d0")
+const K_E8F2F6 := Color("#e8f2f6")
+const K_EEF6F6 := Color("#eef6f6")
+const K_F0C840 := Color("#f0c840")
+const K_FF7A28 := Color("#ff7a28")
+const K_FF8A30 := Color("#ff8a30")
+const K_FF9A40 := Color("#ff9a40")
+const K_FFB050 := Color("#ffb050")
+const K_FFB45A := Color("#ffb45a")
+const K_FFD060 := Color("#ffd060")
+const K_FFE070 := Color("#ffe070")
+const K_FFE080 := Color("#ffe080")
+const K_FFE6A0 := Color("#ffe6a0")
+const K_FFEAA0 := Color("#ffeaa0")
+const K_FFF0A0 := Color("#fff0a0")
+const K_FFF2B0 := Color("#fff2b0")
+const K_FFF4C0 := Color("#fff4c0")
 
 var game: Game
 var terrain: Terrain
@@ -114,7 +154,7 @@ func setup(g: Game) -> void:
 	# the dark beyond the edges of the map
 	var bg := Node2D.new()
 	_root.add_child(bg)
-	RenderingServer.canvas_item_add_rect(bg.get_canvas_item(), Rect2(-N * 32.0 - 6000, -6000, N * 64.0 + 12000, N * 32.0 + 12000), Color("#141a12"))
+	RenderingServer.canvas_item_add_rect(bg.get_canvas_item(), Rect2(-N * 32.0 - 6000, -6000, N * 64.0 + 12000, N * 32.0 + 12000), K_141A12)
 	terrain = Terrain.new()
 	_root.add_child(terrain)
 	terrain.setup(g.map)
@@ -167,6 +207,11 @@ func setup(g: Game) -> void:
 		_ore_frame[i] = int(Rng.hash2(i % N, i / N, 5) * 3)
 	for p in g.players:
 		_ufac.append(p.faction)
+		# load every sheet now rather than in the middle of a fight
+		for key in Data.UNIT_ORDER:
+			Art.unit(p.faction, key)
+		for key in ["hq"] + Data.BUILD_ORDER:
+			Art.building(p.faction, key)
 	_fog_img = Image.create(N, N, false, Image.FORMAT_RGBA8)
 	_fog_bytes.resize(N * N * 4)
 	_fog_tex = ImageTexture.create_from_image(_fog_img)
@@ -504,6 +549,7 @@ func redraw(dt := 1.0 / 60.0) -> void:
 		_footprint(cl, e.tx, e.ty, e.w, e.h, C_SEL if e.owner == 0 else C_FOE, 0.9 if e.selected else 0.5)
 
 	_gather_fx()
+	_lap("gather")
 	_draw_fx_low()
 	_lap("_draw_fx_low")
 	var gr: Variant = atmos.grade()
@@ -738,8 +784,8 @@ func _draw_ent(ci: RID, e: Ent) -> void:
 			var oy: float = (-sn * back + c * side * side_w) / 16.0
 			var q := _scr(e.x + ox, e.y + oy, e.z + float(bu["z"]))
 			_glow(_layers[L_AIR_ADD], q.x, q.y, 5 * P, Color(1, 150 / 255.0, 60 / 255.0, 0.9))
-			_rect(ci, q.x - P - flick, q.y - P, 2 * P + flick * 2, 2 * P, Color("#ff8a30"))
-			_rect(ci, q.x - 1, q.y - 1, 2, 2, Color("#fff2b0"))
+			_rect(ci, q.x - P - flick, q.y - P, 2 * P + flick * 2, 2 * P, K_FF8A30)
+			_rect(ci, q.x - 1, q.y - 1, 2, 2, K_FFF2B0)
 	if not art.rotor.is_empty():
 		_draw_rotor(ci, e, art.rotor, s)
 
@@ -751,7 +797,7 @@ func _draw_rotor(ci: RID, e: Ent, R: Dictionary, s: Vector2) -> void:
 	var cx := s.x
 	var cy := s.y - float(R["z"]) * KZ
 	var r := float(R["r"]) * P * 0.72
-	_ellipse(ci, cx, cy, r * 1.42, r * 0.71, Color(Color("#d8dcd0"), 0.13))
+	_ellipse(ci, cx, cy, r * 1.42, r * 0.71, Color(K_D8DCD0, 0.13))
 	var n := int(R.get("blades", 2))
 	var a := (g.time * 23 + e.id) * (1.0 if e.z > 2 else 0.15)
 	var rcx := Rng.js_round(cx)
@@ -762,10 +808,10 @@ func _draw_rotor(ci: RID, e: Ent, R: Dictionary, s: Vector2) -> void:
 		for lag_al in [[0.32, 0.12], [0.16, 0.25]]:
 			var al: float = 1.0 - pow(1.0 - lag_al[1], 3.0)
 			var tp := _tip(cx, cy, r, ang - lag_al[0])
-			_line(ci, rcx, rcy, tp.x, tp.y, Color(Color("#3a3c36"), al), P)
+			_line(ci, rcx, rcy, tp.x, tp.y, Color(K_3A3C36, al), P)
 		var tp2 := _tip(cx, cy, r, ang)
-		_line(ci, rcx, rcy, tp2.x, tp2.y, Color("#24261f"), P)
-	_rect(ci, rcx - P, rcy - P, 2 * P, 2 * P, Color("#4a4c44"))
+		_line(ci, rcx, rcy, tp2.x, tp2.y, K_24261F, P)
+	_rect(ci, rcx - P, rcy - P, 2 * P, 2 * P, K_4A4C44)
 	var tail := Art.mount_offset(float(R.get("tailSide", 1)) * 1.3, -float(R["tail"]) + 1.5, float(R["z"]) - 2.5, e.dir)
 	var qx := s.x + tail.x
 	var qy := s.y + tail.y
@@ -775,12 +821,12 @@ func _draw_rotor(ci: RID, e: Ent, R: Dictionary, s: Vector2) -> void:
 	if ul == 0:
 		ul = 1
 	var rr := 3.2 * P
-	_ellipse(ci, qx, qy, rr * absf(ux / ul) + 1, rr, Color(Color("#d8dcd0"), 0.18))
+	_ellipse(ci, qx, qy, rr * absf(ux / ul) + 1, rr, Color(K_D8DCD0, 0.18))
 	for off in [0.0, PI / 2]:
 		var at: float = g.time * 40 + off + e.id
 		var ex := cos(at) * rr * (ux / ul)
 		var ey := cos(at) * rr * (uy / ul) - sin(at) * rr
-		_line(ci, Rng.js_round(qx - ex), Rng.js_round(qy - ey), Rng.js_round(qx + ex), Rng.js_round(qy + ey), Color("#2a2c28"))
+		_line(ci, Rng.js_round(qx - ex), Rng.js_round(qy - ey), Rng.js_round(qx + ex), Rng.js_round(qy + ey), K_2A2C28)
 
 
 static func _tip(cx: float, cy: float, r: float, ang: float) -> Vector2:
@@ -832,48 +878,48 @@ func _draw_fx_low() -> void:
 		var kind := f.kind
 		var q := _fq[j]
 		var k := f.t / f.life
-		match kind:
-			"smoke", "dust":
+		match ki:
+			1, 5:  # smoke, dust
 				# the heavy smoke of a blast is dark, big and grows as it rises
-				var heavy := kind == "smoke" and f.size >= 4
-				var set_: Sheet = Art.dust if kind == "dust" else (Art.soot if heavy else Art.smoke)
+				var heavy := ki == 1 and f.size >= 4
+				var set_: Sheet = Art.dust if ki == 5 else (Art.soot if heavy else Art.smoke)
 				var r := mini(set_.n - 1, int(Rng.js_round(f.size * 0.9 + k * 7)) - 2) if heavy else mini(8, int(Rng.js_round(f.size + k * 3)) - 1)
-				set_.draw(ci, maxi(0, r), q.x, q.y, Color(1, 1, 1, (1 - k) * (0.5 if kind == "dust" else (0.85 if heavy else 0.7))))
-			"debris":
+				set_.draw(ci, maxi(0, r), q.x, q.y, Color(1, 1, 1, (1 - k) * (0.5 if ki == 5 else (0.85 if heavy else 0.7))))
+			6:  # debris
 				var big := f.size >= 3
-				_rect(ci, q.x, q.y, (4 if big else 2) * P, (3 if big else 1) * P, Color("#ffb050") if k < 0.25 else Color("#2a2622"))
-			"clod":
+				_rect(ci, q.x, q.y, (4 if big else 2) * P, (3 if big else 1) * P, K_FFB050 if k < 0.25 else K_2A2622)
+			10:  # clod
 				# earth thrown up by a blast
 				var al := (1 - k) / 0.3 if k > 0.7 else 1.0
 				var h := Rng.hash2(int(Rng.js_round(f.vx * 1000)), int(Rng.js_round(f.life * 1000)), 3)
-				var col := Color("#4a3a28") if h < 0.35 else (Color("#6a5438") if h < 0.7 else Color("#2e261e"))
+				var col := K_4A3A28 if h < 0.35 else (K_6A5438 if h < 0.7 else K_2E261E)
 				col.a = al
 				var hh := f.size - 1
 				if hh == 0:
 					hh = 1
 				_rect(ci, q.x, q.y, f.size * P - 1, hh * P, col)
-				_rect(ci, q.x, q.y, 2 if f.size >= 3 else 1, 1, Color(Color("#8a7252"), al))
-			"wake":
+				_rect(ci, q.x, q.y, 2 if f.size >= 3 else 1, 1, Color(K_8A7252, al))
+			7:  # wake
 				# foam spreading behind a boat
 				var r := Rng.js_round(f.size * P * (0.6 + k * 1.4))
 				var al := (1 - k) * 0.75
-				var c1 := Color(Color("#eef6f6"), al)
+				var c1 := Color(K_EEF6F6, al)
 				_rect(ci, q.x - r, q.y, r * 2 + 1, 1, c1)
 				_rect(ci, q.x - r + 2, q.y + 1, r * 2 - 3, 1, c1)
 				if r > 2:
-					var c2 := Color(Color("#c8dde2"), al)
+					var c2 := Color(K_C8DDE2, al)
 					_rect(ci, q.x - r + 1, q.y - 1, 2, 1, c2)
 					_rect(ci, q.x + r - 2, q.y + 2, 2, 1, c2)
-			"splash":
+			8:  # splash
 				# a column of water and its ring
 				var h := Rng.js_round(sin(minf(1, k * 1.4) * PI) * (6 + f.size * 6) * P)
 				var w := (1 + f.size) * P
 				var al := 1 - k * 0.7
-				_rect(ci, q.x - w, q.y - h, w * 2, h, Color(Color("#e8f2f6"), al))
-				_rect(ci, q.x - w, q.y - h, P, h, Color(Color("#b8d4e0"), al))
+				_rect(ci, q.x - w, q.y - h, w * 2, h, Color(K_E8F2F6, al))
+				_rect(ci, q.x - w, q.y - h, P, h, Color(K_B8D4E0, al))
 				_rect(ci, q.x - Rng.js_round(w / 2), q.y - h, w, P, Color(1, 1, 1, al))
 				var rr := int(Rng.js_round((2 + k * (5 + f.size * 3)) * P))
-				_ring(ci, q.x, q.y, rr, Color(Color("#d8eef4"), al))
+				_ring(ci, q.x, q.y, rr, Color(K_D8EEF4, al))
 
 
 func _light(x: float, y: float, r: float, c: Color, a: float) -> void:
@@ -941,14 +987,14 @@ func _draw_lights(X0: float, X1: float, Y0: float, Y1: float, ty0: int, ty1: int
 		var f: Game.Fx = _fv[j]
 		var q := _fq[j]
 		var k := f.t / f.life
-		match f.kind:
-			"exp":
+		match f.ki:
+			0:  # exp
 				_light(q.x, q.y - 4 * P, (20 + f.size * 16) * P, Color(1, 170 / 255.0, 80 / 255.0, 0.95), (1 - k) * (0.55 + level * 0.5))
-			"ember":
+			11:  # ember
 				_light(q.x, q.y, 3 * P, Color(1, 170 / 255.0, 60 / 255.0), (1 - k) * (0.5 + level * 0.5))
-			"fire":
+			2:  # fire
 				_light(q.x, q.y - 3 * P, 12 * P, Color(1, 140 / 255.0, 50 / 255.0, 0.8), 0.25 + level * 0.6)
-			"flash":
+			3:  # flash
 				_light(q.x, q.y, (6 + f.size * 3) * P, Color(1, 230 / 255.0, 160 / 255.0, 0.9), 0.4 + level * 0.6)
 	var ci := _layers[L_LIGHT]
 	var vr := _view.grow(64)
@@ -979,15 +1025,15 @@ func _draw_shots() -> void:
 			"bullet", "flak":
 				var pr := _shot_at(s, maxf(0, s.t - 0.03))
 				var r := _scr(pr.x, pr.y, pr.z)
-				_line(ci, r.x, r.y, q.x, q.y, Color("#ffb45a") if s.kind == "flak" else Color("#ffeaa0"))
+				_line(ci, r.x, r.y, q.x, q.y, K_FFB45A if s.kind == "flak" else K_FFEAA0)
 			"shell":
-				_rect(ci, q.x - 2, q.y, 4, 2, Color("#fff4c0"))
+				_rect(ci, q.x - 2, q.y, 4, 2, K_FFF4C0)
 			"rocket", "mlrs":
-				_rect(ci, q.x - 2, q.y - 1, 4, 3, Color("#e8e2d0"))
-				_rect(ci, q.x, q.y, 2, 2, Color("#ffd060"))
+				_rect(ci, q.x - 2, q.y - 1, 4, 3, K_E8E2D0)
+				_rect(ci, q.x, q.y, 2, 2, K_FFD060)
 			"missile":
-				_rect(ci, q.x - 3, q.y - 1, 6, 3, Color("#d8dcd8"))
-				_rect(ci, q.x - 1, q.y, 2, 2, Color("#ffe080"))
+				_rect(ci, q.x - 3, q.y - 1, 6, 3, K_D8DCD8)
+				_rect(ci, q.x - 1, q.y, 2, 2, K_FFE080)
 			"snipe":
 				var pr := _shot_at(s, maxf(0, s.t - 0.05))
 				var r := _scr(pr.x, pr.y, pr.z)
@@ -995,8 +1041,8 @@ func _draw_shots() -> void:
 			"art":
 				var gq := _scr(p.x, p.y)
 				_rect(ci, gq.x - 2, gq.y, 4, 2, Color(0, 0, 0, 0.3))
-				_rect(ci, q.x - 2, q.y - 2, 4, 4, Color("#2a2a28"))
-				_rect(ci, q.x, q.y - 2, 2, 1, Color("#ffe6a0"))
+				_rect(ci, q.x - 2, q.y - 2, 4, 4, K_2A2A28)
+				_rect(ci, q.x, q.y - 2, 2, 1, K_FFE6A0)
 
 
 ## smoke, fire and explosions
@@ -1010,17 +1056,17 @@ func _draw_fx_high() -> void:
 			continue
 		var q := _fq[j]
 		var k := f.t / f.life
-		match f.kind:
-			"exp":
+		match f.ki:
+			0:  # exp
 				var fr: Sheet = Art.explosion[mini(3, int(f.size))]
 				var i := mini(fr.n - 1, floori(k * fr.n))
 				if f.scale != 1.0:
 					fr.draw_scaled(ci, i, q.x, q.y, f.scale)
 				else:
 					fr.draw(ci, i, q.x, q.y)
-			"fire":
+			2:  # fire
 				Art.fire.draw(ci, int(floorf(f.t * 14 + f.x * 7)) % Art.fire.n, q.x, q.y)
-			"flash":
+			3:  # flash
 				if f.size > 3:
 					var r := Rng.js_round(f.size * 3 * P * (1 - k * 0.5))
 					_glow(ad, q.x, q.y, r, Color(1, 240 / 255.0, 200 / 255.0, 1 - k))
@@ -1028,17 +1074,17 @@ func _draw_fx_high() -> void:
 					var r := Rng.js_round(f.size * P)
 					_glow(ad, q.x, q.y, r * 2, Color(1, 236 / 255.0, 170 / 255.0, 1))
 				_rect(ad, q.x - P, q.y - P, P * 2, P * 2, Color.WHITE)
-			"ring":
+			9:  # ring
 				# the pressure wave
 				var rr := int(Rng.js_round((3 + k * (10 + f.size * 15)) * P))
 				_ring(ci, q.x, q.y, rr, Color(1, 240 / 255.0, 210 / 255.0, (1 - k) * 0.75))
 				if rr > 4:
 					var r2 := int(Rng.js_round(rr * 0.8))
 					_ring(ci, q.x, q.y, r2, Color(180 / 255.0, 160 / 255.0, 124 / 255.0, (1 - k) * 0.5))
-			"ember":
-				_rect(ci, q.x, q.y, P, P * 2 if k < 0.3 else P, Color("#ffe070") if k < 0.5 else Color("#ff7a28"))
-			"spark":
-				var c := Color("#fff0a0") if k < 0.5 else Color("#ff9a40")
+			11:  # ember
+				_rect(ci, q.x, q.y, P, P * 2 if k < 0.3 else P, K_FFE070 if k < 0.5 else K_FF7A28)
+			4:  # spark
+				var c := K_FFF0A0 if k < 0.5 else K_FF9A40
 				_rect(ci, q.x + Rng.js_round(sin(f.t * 40) * 2 * P), q.y - Rng.js_round(k * 3 * P), P, P, c)
 				_rect(ci, q.x - Rng.js_round(cos(f.t * 37) * 2 * P), q.y - Rng.js_round(k * 2 * P), P, P, c)
 
@@ -1073,7 +1119,7 @@ func _draw_bars() -> void:
 		y = Rng.js_round(y)
 		_rect(ci, x - 1, y - 1, w + 2, 6, C_BAR_BG)
 		var bw := maxf(1, Rng.js_round(w * k))
-		_rect(ci, x, y, bw, 4, Color("#5fd65a") if k > 0.6 else (Color("#e8c03a") if k > 0.3 else Color("#e2492f")))
+		_rect(ci, x, y, bw, 4, K_5FD65A if k > 0.6 else (K_E8C03A if k > 0.3 else K_E2492F))
 		_rect(ci, x, y, bw, 1, Color(1, 1, 1, 0.25))
 		# rank stripes
 		if e.rank > 0:
@@ -1096,7 +1142,7 @@ func _chevrons(ci: RID, x: float, y: float, rank: int) -> void:
 	var px := func(a: float, b: float, w: float, h: float, c: Color) -> void:
 		RenderingServer.canvas_item_add_rect(ci, Rect2(x + a * P, y + b * P, w * P, h * P), c)
 	px.call(-1, -1, 7, 7 if rank >= 3 else rank * 3 + 1, C_BAR_BG)
-	var c := Color("#f0c840")
+	var c := K_F0C840
 	if rank >= 3:
 		px.call(2, 0, 1, 5, c)
 		px.call(0, 2, 5, 1, c)
@@ -1151,7 +1197,7 @@ func _draw_garrisons() -> void:
 		var top := base.y - roof.x + 3 * P
 		var team: Array = Art.TEAM.get(_ufac[h.owner], Art.TEAM["nato"])
 		# the pole and a flag in the wind
-		_rect(ci, base.x, top - 14 * P, P, 14 * P, Color("#1a1c18"))
+		_rect(ci, base.x, top - 14 * P, P, 14 * P, K_1A1C18)
 		var wave := int(floorf(g.time * 4 + h.id)) % 2
 		for k in 7:
 			var dy := 0.0 if (k + wave) % 4 < 2 else P
@@ -1163,14 +1209,14 @@ func _draw_garrisons() -> void:
 			var x0 := base.x - Rng.js_round(w / 2) + 4 * P
 			_rect(ci, x0 - 1, top - 20 * P - 1, w + 2, 3 * P + 2, C_BAR_BG)
 			for i in h.cap:
-				_rect(ci, x0 + i * 4 * P, top - 20 * P, 3 * P, 3 * P, C_GOLD if i < h.occ.size() else Color("#3a3e34"))
+				_rect(ci, x0 + i * 4 * P, top - 20 * P, 3 * P, 3 * P, C_GOLD if i < h.occ.size() else K_3A3E34)
 			# the weakest of them, as a bar
 			var k := 1.0
 			for u in h.occ:
 				k = minf(k, u.hp / u.max_hp)
 			if k < 1:
 				_rect(ci, x0 - 1, top - 16 * P, w + 2, 2 * P + 1, C_BAR_BG)
-				_rect(ci, x0, top - 16 * P + 1, maxf(1, Rng.js_round(w * k)), 2 * P - 1, Color("#5fd65a") if k > 0.6 else (Color("#e8c03a") if k > 0.3 else Color("#e2492f")))
+				_rect(ci, x0, top - 16 * P + 1, maxf(1, Rng.js_round(w * k)), 2 * P - 1, K_5FD65A if k > 0.6 else (K_E8C03A if k > 0.3 else K_E2492F))
 
 
 ## fog of war: one pixel per tile, laid over the ground through the projection, smoothly filtered
@@ -1199,7 +1245,7 @@ func _draw_fog() -> void:
 func _draw_overlay() -> void:
 	var g := game
 	var ci := _layers[L_OVER]
-	var green := Color("#9cff8a")
+	var green := K_9CFF8A
 	for e in g.ents:
 		if not e.selected or not e.is_b or e.rally == null or e.owner != 0:
 			continue

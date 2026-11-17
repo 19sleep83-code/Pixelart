@@ -204,3 +204,54 @@ urad, base_sight, armor_i, turret, w_range, w_min, w_gap, w_burst, w_cls_i, w_gr
 - `… runner.tscn -- sim_aivai [Minuten] [seed:karte …]` – KI gegen KI wie `balance/aivai.ts` (Sieger, Dauer,
   Verluste, gebaute Einheiten, ms je Tick); `sim_aivai stress [je Seite] [seed:karte]` – Massenschlacht, ms je Tick.
 - `… runner.tscn -- sim_timeline [seed] [karte] [Minuten]` – Verlauf alle 30 s zum Vergleich mit dem Prototyp.
+
+## View-API
+
+Darstellung: `scripts/view/world.gd` (`World`, Node2D; Port von `render.ts`, `atmos.ts` und den Bodenmarken aus
+`terrain.ts`), dazu `terrain.gd` (`Terrain`: TileMapLayer-Boden, Baum-/Hausschatten, Brandflecken, Trümmer),
+`atmos.gd` (`Atmos`: Wasser-Glitzern/Brandung als MultiMesh mit Shader, Wolkenschatten, Tageszeit, Regen),
+`art.gd` (`Art`: alle Sheets aus dem Manifest, statisch geladen), `sheet.gd` (`Sheet`: ein Sheet, zeichnet Zellen
+über den RenderingServer). Teststeuerung: `debug_input.gd` (`DebugInput`), Gefecht: `scripts/battle.gd`.
+
+```gdscript
+var world := World.new()
+add_child(world)          # erst in den Baum, dann setup
+world.setup(game)         # Boden, Ebenen, Kamera; zeichnet danach jedes Bild selbst (_process)
+```
+
+Alles in **Weltpixeln** (die feinen Pixel des Prototyps: Feld 64 × 32, Höhe × 2,5). Die Welt wird wie im
+Prototyp 1:1 in ein SubViewport (Fenstergröße / Zoom, gerade Maße) gezeichnet und auf einer CanvasLayer
+(`layer = -1`, unter der Oberfläche) mit harten Pixeln hochskaliert. Die Oberfläche gehört auf eine eigene
+CanvasLayer (≥ 0) und rechnet Bildschirmpunkte nur über `screen_to_px` um.
+
+| Mitglied | |
+| --- | --- |
+| `game: Game`, `terrain: Terrain`, `atmos: Atmos` | |
+| `camera: Camera2D` | im SubViewport; `position` = Mitte der Ansicht in Weltpixeln. **`zoom` bleibt 1** – Zoom nur über `set_zoom_level` |
+| `LEVELS = [1, 1.5, 2, 3]`, `zoom_level: int`, `zoom: float` (Getter) | Bildschirmpixel je Weltpixel; Start: 1 (= 1,5) bei Fensterbreite > 1500, sonst 0 |
+| `set_zoom_level(i, anchor_screen := Vector2.INF)` | der Weltpunkt unter `anchor_screen` (Bildschirmpixel) bleibt stehen; ohne Anker die Mitte |
+| `pan_screen(delta: Vector2)` | Ansicht um `delta` Bildschirmpixel verschieben (+x: Ansicht nach rechts; Ziehen mit der Maus: `-relative`) |
+| `look_at_tile(x, y)`, `clamp_camera()` | Mitte auf ein Feld (Grenzen wie `clampCam`) |
+| `tile_to_px(x, y, z := 0.0) -> Vector2`, `px_to_tile(p) -> Vector2` | Felder ↔ Weltpixel (Boden) |
+| `screen_to_px(p) -> Vector2`, `px_to_screen(p) -> Vector2` | Bildschirm (Viewport-Pixel) ↔ Weltpixel, ohne Wackeln |
+| `pick(px: Vector2) -> Ent` | oberste Einheit/Gebäude unter einem Weltpixel (Regeln wie `pick` in render.ts, Fremde nur wenn `shown`) |
+| `pick_garrison(px) -> Game.Garrison` | Haus/Kirche/Scheune/Bunker unter einem Weltpixel (nur aufgedeckt) |
+| `shown(e: Ent) -> bool` | wird die Einheit gezeichnet (Nebel, versteckte Scharfschützen, getragen/im Haus) |
+| `add_shake(k)` | Bildwackeln wie `addShake` |
+| `overlay: Dictionary` | `box`: `Rect2` in Bildschirmpixeln (Auswahlrahmen), `place`: `{key, tx, ty, ok}` (Bauplatz mit Grundriss), `hover_ent: Ent`, `hover_g: Game.Garrison`, `move_mark: {x, y, t, attack}` (`t` = `game.time` des Befehls); jeweils `null` = aus |
+| `paused: bool` | kein Regen-Fortschritt (dt = 0), wie `draw(o, 0)` |
+| `auto_draw: bool`, `redraw(dt)`, `draw_ms`, `profile` | Tests: selbst zeichnen, Zeit der letzten Füllung (ms), Teilzeiten (`profile = {}`) |
+
+Die Welt leert jedes Bild `game.stamps`, `game.ore_changed` und setzt `game.fog_dirty = false` (wie der Prototyp);
+Gebäude im Aufbau erzeugen Staub über `game.add_fx` (wie im Prototyp aus dem Renderer). Auswahl (`e.selected`),
+Sammelpunkte (`e.rally`) und Häuser der gewählten Soldaten zeichnet die Welt von selbst.
+
+Ebenen (je ein Canvas-Item, jedes Bild neu gefüllt, nur Sichtbares): Boden (TileMapLayer + Schatten/Marken in
+16×16-Feld-Stücken) → Wasser (Shader) → Schatten, Auswahlringe → Statisches/Erz/Wracks/Gebäude/Einheiten nach
+`x + y` sortiert, Flieger nach Höhe → Nachbrenner (additiv) → Wolkenschatten, Gebäudeklammern → Rauch/Staub/
+Gischt → Tageszeit (multiplikativ) → Lichter (additiv) → Geschosse → Explosionen/Feuer/Ringe (+ additiv) → Regen →
+Balken, Ränge, Fahnen → Nebel (Bild N×N, linear gefiltert, durch die Projektion) → Overlay.
+
+Tests: `… runner.tscn -- shot_battle <ordner> [base_day base_night arty sea air village rain]` (Bilder),
+`… -- view_aivai [minuten] [seed:karte] [zoomstufe] [bildordner]` (KI gegen KI mit Darstellung, Zeiten),
+`… -- view_aivai stress [je Seite] [seed:karte] [zoomstufe] [sekunden]`, `… -- view_battle` (battle.gd).

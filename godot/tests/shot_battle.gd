@@ -125,6 +125,34 @@ func scene_base_day() -> void:
 		if e.key == "factory":
 			e.selected = true
 			e.rally = Vector2(e.x + 3, e.y + 4)
+		if e.key == "mbt":
+			e.flash_t = game.time  # the white blink of a hit
+		if e.key == "ifv":
+			e.hp *= 0.5
+			e.last_hit = game.time
+			e.rank = 2
+	var hq := _hq(0)
+	# a sniper in hiding, a loaded harvester, a building going up
+	var w := game.pf.nearest_walkable(hq.x - 1, hq.y + 5)
+	var sn := game.add_unit(0, "sniper", w.x + 0.5, w.y + 0.5)
+	sn.still_t = 10
+	w = game.pf.nearest_walkable(hq.x + 7, hq.y + 6)
+	var hv := game.add_unit(0, "harv", w.x + 0.5, w.y + 0.5)
+	hv.cargo = game.harvest_load * 0.6
+	hv.selected = true
+	for r in 8:
+		var done := false
+		for a in range(-r, r + 1):
+			if game.can_place(0, "helipad", hq.tx - 4 + a, hq.ty + 6 + r):
+				game.add_building(0, "helipad", hq.tx - 4 + a, hq.ty + 6 + r).built = 0.55
+				done = true
+				break
+		if done:
+			break
+	# the cursor's work: a building being placed, a move mark, a selection box
+	world.overlay["place"] = {"key": "radar", "tx": hq.tx + 6, "ty": hq.ty - 3, "ok": true}
+	world.overlay["move_mark"] = {"x": hq.x + 5, "y": hq.y + 8, "t": game.time - 0.15, "attack": false}
+	world.overlay["box"] = Rect2(1250, 600, 220, 140)
 	await _shot("a_base_day")
 
 
