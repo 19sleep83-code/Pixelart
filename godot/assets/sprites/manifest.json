@@ -2734,6 +2734,11 @@
      10,
      0
     ],
+    "burner": {
+     "back": 16,
+     "side": 0.5,
+     "z": 2.5
+    },
     "radius": 0.55
    },
    "boat": {
@@ -4218,6 +4223,11 @@
      10,
      0
     ],
+    "burner": {
+     "back": 16,
+     "side": 0.5,
+     "z": 2.5
+    },
     "radius": 0.55,
     "planned": true
    },
@@ -4267,6 +4277,11 @@
      12,
      1
     ],
+    "burner": {
+     "back": 14,
+     "side": 4,
+     "z": 6
+    },
     "radius": 0.6,
     "planned": true
    }
@@ -6971,6 +6986,11 @@
      10,
      0
     ],
+    "burner": {
+     "back": 16,
+     "side": 4,
+     "z": 2.5
+    },
     "radius": 0.55
    },
    "boat": {
@@ -8455,6 +8475,11 @@
      10,
      0
     ],
+    "burner": {
+     "back": 17.5,
+     "side": 4,
+     "z": 2
+    },
     "radius": 0.55,
     "planned": true
    },
@@ -8504,6 +8529,11 @@
      12,
      1
     ],
+    "burner": {
+     "back": 9.5,
+     "side": 3,
+     "z": 2.5
+    },
     "radius": 0.6,
     "planned": true
    }
