@@ -29,6 +29,39 @@ Texturfilter *Nearest* (scharfe Pixel), Fenster frei skalierbar, Querformat auf 
 
 Wie TypeScript-Namen übertragen wurden: `PORTING.md`.
 
+## Steuerung
+
+**Maus und Tastatur**
+
+| | |
+| --- | --- |
+| Linksklick / Rahmen ziehen | auswählen (Umschalt: hinzufügen/abwählen, Doppelklick: alle gleichen im Bild; eigenes Haus: die Soldaten darin, Bunker doppelt: Besatzung) |
+| Rechtsklick | bewegen, angreifen, Erz abbauen / zum Depot, Haus oder eigenen Bunker besetzen, feindlich besetztes Haus beschießen, Pionier: Gebäude erobern, aufs eigene Landungsschiff: einsteigen; mit Gebäuden: Sammelpunkt |
+| A + Linksklick | Angriffsbewegung (mit Umschalt bleibt der Modus an) · Rechtsklick/Esc bricht ab |
+| S · D | Stopp · Landungsschiff entladen, Haus/Bunker räumen |
+| F1–F5, Tab | Baureiter (Bau, Infanterie, Fahrzeuge, Luft, See) |
+| Y X C V B N M , . - | Felder des Baumenüs (Klick: in Auftrag geben / fertiges Gebäude platzieren, Rechtsklick: abbrechen) |
+| Strg + 1–9 · 1–9 | Gruppe bilden · Gruppe wählen (zweimal: hinspringen) |
+| Q · E · Leertaste · H | ganze Armee · Kampfeinheiten im Bild · zur Auswahl · zum Hauptquartier |
+| Esc | Bauen/Angriffsmodus abbrechen, sonst Auswahl aufheben (im Pause-Menü: weiter) |
+| Pfeiltasten, Bildschirmrand, mittlere Maustaste ziehen | Ansicht verschieben |
+| Mausrad | Zoom am Mauszeiger (die Stufe wird gemerkt) |
+| P, F10, Knopf „Menü“ | Pause mit Menü |
+| Lagekarte | Klick/Ziehen: Ansicht dorthin · Rechtsklick: Auswahl dorthin schicken |
+
+**Touch** (Handy, Tablet; die Oberfläche ist dort 1,5-mal so groß)
+
+| | |
+| --- | --- |
+| Tippen | auswählen; mit eigener Auswahl: Befehl wie ein Rechtsklick (eigene Einheit antippen wählt sie) |
+| zweimal tippen | alle gleichen Einheiten im Bild |
+| lange drücken | Angriffsbewegung |
+| ein Finger ziehen | Karte verschieben |
+| Knopf „Rahmen“ (unten rechts) | ein Finger zieht nun einen Auswahlrahmen (nochmal tippen: aus) |
+| Knopf „X“ | Auswahl aufheben, Bauen abbrechen |
+| zwei Finger | zoomen und verschieben |
+| Baumenü lange drücken | Auftrag abbrechen |
+
 ## Grafik und Töne aktualisieren
 
 Wenn sich Modelle im Prototyp ändern: im Hauptordner
@@ -47,6 +80,7 @@ tools/update-godot-assets.sh
 godot --headless --path godot res://tests/runner.tscn -- sim_aivai
 godot --headless --path godot res://tests/runner.tscn -- sim_scenarios
 godot --headless --path godot -s tests/map_parity.gd
+xvfb-run -a godot --path godot --rendering-driver opengl3 --resolution 1600x900 res://tests/runner.tscn -- ui_flow
 ```
 
 `map_parity` gibt Prüfsummen aus, die mit dem Prototyp übereinstimmen müssen (gleiche Karten und Wege).

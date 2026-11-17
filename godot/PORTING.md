@@ -25,8 +25,8 @@ Regeln, damit alle Teile zusammenpassen.
 | `src/game/game.ts` | `scripts/game/game.gd`, `scripts/game/ent.gd` | `Game`, `Ent` |
 | `src/game/ai.ts` | `scripts/game/ai.gd` | `AI` |
 | `src/game/render.ts`, `terrain.ts`, `atmos.ts` | `scripts/view/*.gd` | `World`, … |
-| `src/game/input.ts`, `src/ui/hud.ts` | `scripts/view/input.gd`, `scripts/ui/hud.gd` | |
-| `src/main.ts` | `scripts/main.gd` | |
+| `src/game/input.ts`, `src/ui/hud.ts` | `scripts/view/input.gd`, `scripts/ui/hud.gd`, `scripts/ui/minimap.gd` | `PlayerInput`, `Hud`, `MiniMap` |
+| `src/main.ts` | `scripts/main.gd`, `scripts/battle.gd`, `scripts/ui/menu.gd`, `scripts/ui/screens.gd`, `scripts/ui/settings.gd` | `Menu`, `BattleScreens`, `Settings` |
 
 ## Schnittstellen
 
@@ -211,7 +211,7 @@ Darstellung: `scripts/view/world.gd` (`World`, Node2D; Port von `render.ts`, `at
 `terrain.ts`), dazu `terrain.gd` (`Terrain`: TileMapLayer-Boden, Baum-/Hausschatten, Brandflecken, Trümmer),
 `atmos.gd` (`Atmos`: Wasser-Glitzern/Brandung als MultiMesh mit Shader, Wolkenschatten, Tageszeit, Regen),
 `art.gd` (`Art`: alle Sheets aus dem Manifest, statisch geladen), `sheet.gd` (`Sheet`: ein Sheet, zeichnet Zellen
-über den RenderingServer). Teststeuerung: `debug_input.gd` (`DebugInput`), Gefecht: `scripts/battle.gd`.
+über den RenderingServer). Steuerung: `input.gd` (`PlayerInput`, siehe „UI/Input“), Gefecht: `scripts/battle.gd`.
 
 ```gdscript
 var world := World.new()
@@ -240,6 +240,8 @@ CanvasLayer (≥ 0) und rechnet Bildschirmpunkte nur über `screen_to_px` um.
 | `add_shake(k)` | Bildwackeln wie `addShake` |
 | `overlay: Dictionary` | `box`: `Rect2` in Bildschirmpixeln (Auswahlrahmen), `place`: `{key, tx, ty, ok}` (Bauplatz mit Grundriss), `hover_ent: Ent`, `hover_g: Game.Garrison`, `move_mark: {x, y, t, attack}` (`t` = `game.time` des Befehls); jeweils `null` = aus |
 | `paused: bool` | kein Regen-Fortschritt (dt = 0), wie `draw(o, 0)` |
+| `view_inset_right: float` | Bildschirmpixel, die rechts von der Oberfläche verdeckt sind (Seitenleiste); die Kamera darf so viel weiter nach Osten (wie die schmalere Leinwand des Prototyps) |
+| `fog_texture() -> Texture2D` | der Nebel als N×N-Bild (Dunkelheit im Rotkanal, `FOG_SHADER` färbt) – für die Lagekarte |
 | `auto_draw: bool`, `redraw(dt)`, `draw_ms`, `profile` | Tests: selbst zeichnen, Zeit der letzten Füllung (ms), Teilzeiten (`profile = {}`) |
 
 Die Welt leert jedes Bild `game.stamps`, `game.ore_changed` und setzt `game.fog_dirty = false` (wie der Prototyp);
@@ -255,3 +257,69 @@ Balken, Ränge, Fahnen → Nebel (Bild N×N, linear gefiltert, durch die Projekt
 Tests: `… runner.tscn -- shot_battle <ordner> [base_day base_night arty sea air village rain]` (Bilder),
 `… -- view_aivai [minuten] [seed:karte] [zoomstufe] [bildordner]` (KI gegen KI mit Darstellung, Zeiten),
 `… -- view_aivai stress [je Seite] [seed:karte] [zoomstufe] [sekunden]`, `… -- view_battle` (battle.gd).
+
+## UI/Input
+
+Port von `src/game/input.ts` (→ `scripts/view/input.gd`, `PlayerInput`), `src/ui/hud.ts` (→ `scripts/ui/hud.gd`,
+`Hud`, mit `scripts/ui/minimap.gd`, `MiniMap`) und dem Rahmen aus `src/main.ts`/`index.html` (Pause, Ende, Menü,
+Einstellungen). Aufbau eines Gefechts (`battle.gd`, API unverändert: `opts`, Signal `finished`; neu Signal
+`restart(opts)` für „Neues Gefecht“/„Nochmal“, das `main.gd` mit einer neuen Schlacht beantwortet):
+
+```
+Battle (Node)
+├─ World            (CanvasLayer −1: das hochskalierte Bild)
+├─ PlayerInput      (Node: _input/_unhandled_input, _process: scroll() + frame())
+├─ CanvasLayer 1 → Hud (Control, ganzer Bildschirm, mouse_filter IGNORE; nur Platten/Knöpfe fangen Klicks)
+└─ CanvasLayer 2 → BattleScreens (Pause-Menü, Endbildschirm)
+```
+
+- **Bildschirm → Welt** nur über `World.screen_to_px`/`px_to_screen` (Viewport-Pixel); die Kamera-Zoomstufe bleibt 1.
+  Das sichtbare Feld ist der Bildschirm links der Seitenleiste: `PlayerInput.view_rect()`; `look_at(x, y)` (Felder)
+  zentriert darin (H, Leertaste, Gruppen, Lagekarte), Randscrollen am Rand dieses Rechtecks.
+- **Reihenfolge der Ereignisse:** Drücken (Maus, Finger, Tasten) im `_unhandled_input` – was die Oberfläche
+  (Knöpfe, Lagekarte, Seitenleiste) fängt, erreicht das Feld nicht. Loslassen, Mausbewegung, gehaltene Tasten und
+  Ziehen von Fingern, die auf dem Feld begonnen haben, im `_input` (wie die `window`-Listener im Prototyp).
+  HUD-Knöpfe haben `focus_mode = NONE`, damit Leertaste/Tab/Pfeile beim Spiel bleiben.
+- **Tasten:** Buchstaben über `keycode` (wie `e.key`), die Baufelder über `physical_keycode` (wie `e.code`:
+  `KEY_Z` … `KEY_SLASH`, beschriftet Y X C V B N M , . -). Reihenfolge wie im TS: P/F10 (auch Android-Zurück) →
+  bei Pause nichts → `hud.hotkey()` (F1–F5, Tab, Baufelder) → Esc → Ziffern → A S D H Leertaste E Q.
+  Esc im Pause-Menü: weiter.
+- **Zeiten:** Doppelklick 350 ms, doppelte Gruppentaste 400 ms, langes Drücken 550 ms (`Time.get_ticks_msec`).
+- **Rechtsklick-Befehle** (`command()`) 1:1 aus `input.ts`: Sammelpunkt (nur Gebäude), Pionier erobert, Haus/eigener
+  Bunker besetzen bzw. feindlich besetztes Haus beschießen („… ist voll“), Landungsschiff besteigen, Angriff,
+  Erzlaster: Erz/Depot, sonst Bewegen; Bestätigung `Sound.play("ack")` (nicht positional).
+- **Zoom:** Mausrad (und Trackpad-Geste, Zwei-Finger-Pinch) eine Stufe um den Punkt unter dem Zeiger
+  (`World.set_zoom_level(i, anker)`). Start: Stufe 1 bei Feldbreite > 1500 px, sonst 0 (wie der Prototyp, der die
+  Leinwand ohne Seitenleiste misst), +1 bei UI-Maßstab 3, plus die gemerkte Abweichung
+  (`Settings` „view/zoom“ in `user://settings.cfg`, wie `zoom2` im localStorage).
+- **Mauszeiger:** die exportierten Zeiger (`manifest.ui.cursors`, Hotspot × Maßstab, Datei @2x bzw. @3x) liegen auf
+  den Godot-Formen (`UiTheme.CURSORS`: pointer → ARROW, select → POINTING_HAND, move → MOVE, attack → CROSS,
+  enter → DRAG, capture → CAN_DROP, forbidden → FORBIDDEN, place → HELP); `frame()` setzt die Standardform wie
+  der Prototyp `el.style.cursor` (Erz für den Laster: capture). Über der Oberfläche: pointer.
+- **Touch** (`InputEventScreenTouch/Drag`, `emulate_mouse_from_touch` bleibt aus): Tippen wählt aus; mit eigener
+  Auswahl gibt Tippen den Befehl wie ein Rechtsklick (eigene Einheit/Gebäude antippen wählt sie, außer Landungsschiff,
+  Depot für Laster, eigener Bunker für Soldaten); Bauplatz/Angriffsmodus wie Linksklick. Lange drücken:
+  Angriffsbewegung. Ein Finger zieht die Karte (oder, mit dem Rahmen-Knopf, einen Auswahlrahmen), zwei Finger
+  zoomen (Abstand × 1,3 je Stufe) und schieben. Rahmen- und Abwählen-Knopf (Symbole `box_select`, `deselect`)
+  nur auf Touch-Geräten (`UiTheme.is_touch()`: `OS.has_feature("mobile")` oder
+  `DisplayServer.is_touchscreen_available()`); Baufeld lange drücken: Auftrag abbrechen. Die Maus geht daneben
+  weiter.
+- **Maßstab:** `UiTheme.scale_for()` 2 (PC) / 3 (Handy); Maße wie im CSS des Prototyps über `UiTheme.px(css, k)`
+  (bei ×2 = CSS-Pixel: Seitenleiste 300, Felder 80 hoch, Karte 250 breit). Tests: `UiTheme.force_scale`,
+  `UiTheme.force_touch`.
+- **Hud:** `side_width()`, `hotkey(ev)`, `set_tab(q)`, `click(key, q)`, `cancel(key, q)`, `update(force)` (alle 6 Bilder
+  wie im TS, sofort bei `PlayerInput.changed`), `extra(e)`, `control(name)` (Tests: `MenuButton`, `Tab_<q>`,
+  `Item_<key>`, `Act_sell|repair|primary|exit|unload`, `Group_<key>`, `MiniMap`, `BoxSelect`, `Deselect`).
+  Die Lagekarte malt den Boden einmal (Farbe je Kachel = Mitte ihres Bilds im Gelände-Atlas, Wald/Dächer als
+  Punkte), darüber alle 4 Bilder Einheiten, Nebel (`World.fog_texture` mit `FOG_SHADER`), Gitter, Ansichtsrahmen.
+- **Pause/Ende** (`BattleScreens`): Weiter, Ton (gemerkt), „Neues Gefecht, gleiche Einstellungen“, „Zum
+  Hauptmenü“; Ende 1,5 s nach `game.over` mit der Statistik aus `main.ts`, „Nochmal“/„Zum Hauptmenü“.
+  Das Menü merkt Seite, Gegner, Karte, Tageszeit, Wetter (`Settings` „menu/…“).
+
+Tests (`xvfb-run -a -s "-screen 0 1600x900x24" godot --path godot --rendering-driver opengl3 --resolution 1600x900
+res://tests/runner.tscn -- …`):
+- `ui_flow` – vom Menü ins Gefecht und zurück, nur mit künstlichen Eingaben (Maus, Tasten, Finger); PASS/FAIL je
+  Prüfung (Auswahl, Befehle, Tasten, Zoom/Schieben, Lagekarte, Bauen und Platzieren, Produktion, Sammelpunkt,
+  Haus besetzen/räumen, Touch, Verkaufen, Pause).
+- `shot_ui desktop|phone [ordner]` – Bildschirmfotos (Menü, Start, volles Gefecht mit Datenkarte, Einzelauswahl,
+  Pause, Ende); `phone` mit `-screen 0 2400x1080x24` und `--resolution 2400x1080`.

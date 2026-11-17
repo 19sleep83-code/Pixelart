@@ -43,10 +43,7 @@ func run(args: PackedStringArray) -> void:
 	if out != "":
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(out.path_join("battle_view.png"))
-	var ev := InputEventKey.new()
-	ev.keycode = KEY_ESCAPE
-	ev.pressed = true
-	Input.parse_input_event(ev)
+	b.quit()  # Esc only deselects now (as in the prototype); leave through the battle API
 	for i in 5:
 		await get_tree().process_frame
 	print("finished emitted: ", done[0])

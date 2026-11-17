@@ -67,6 +67,21 @@ func _click(p: Vector2, btn := MOUSE_BUTTON_LEFT, shift := false) -> void:
 	await _button(p, btn, false, shift)
 
 
+## a double click: the four button events one frame apart
+func _dbl(p: Vector2) -> void:
+	await _move(p)
+	for pressed in [true, false, true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.position = p
+		ev.global_position = p
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = pressed
+		ev.button_mask = 1 if pressed else 0
+		Input.parse_input_event(ev)
+		await _frames()
+	await _frames()
+
+
 func _key(code: Key, ctrl := false, shift := false) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = code
@@ -251,8 +266,7 @@ func _selection() -> void:
 	await _frames(12)  # not a double click
 	await _click(_at(ifv), MOUSE_BUTTON_LEFT, true)
 	check("shift-click adds", inp.sel.size() == 2 and inp.sel.has(ifv), str(inp.sel.size()))
-	await _click(_at(r0))
-	await _click(_at(r0))
+	await _dbl(_at(r0))
 	check("double click: all of that kind in view", inp.sel.size() == 3 and inp.sel.all(func(e: Ent) -> bool: return e.key == "rifle"), str(inp.sel.size()))
 	await _frames(12)
 	# empty ground deselects
@@ -517,8 +531,7 @@ func _garrison() -> void:
 	var rifles := _mine("rifle")
 	await _key(KEY_H)
 	var r0 := world.pick(world.screen_to_px(await _show(rifles[0])))
-	await _click(_at(r0))
-	await _click(_at(r0))
+	await _dbl(_at(r0))
 	var sel := inp.sel.duplicate()
 	check("riflemen selected for the house", sel.size() >= 2, str(sel.size()))
 	# over to the house with the minimap, then a right click on it
@@ -592,16 +605,23 @@ func _touch_tests() -> void:
 
 
 func _sell() -> void:
-	await _key(KEY_H)
-	var pw: Ent = _mine("power")[0]
 	await _key(KEY_ESCAPE)
-	var pp := await _show(pw)
-	var ph := world.pick(world.screen_to_px(pp))
-	print("  debug: pw at %s picks %s, safe %s, place '%s' attack %s hovered %s" % [pp, ph.key if ph else "-", _safe(pp), inp.place, inp.attack_mode, get_viewport().gui_get_hovered_control()])
-	await _click(pp)
-	print("  debug: sel ", inp.sel.map(func(e: Ent) -> String: return e.key))
-	check("click selects the power plant", inp.sel.size() == 1 and inp.sel[0] == pw)
+	await _key(KEY_H)
+	# one of our buildings that can be clicked (not hidden behind another)
+	var pw: Ent = null
+	for k in ["power", "barracks", "ref", "factory"]:
+		for e in _mine(k):
+			if pw == null:
+				var q := await _show(e)
+				if world.pick(world.screen_to_px(q)) == e:
+					pw = e
+	if pw == null:
+		check("a building to sell in view", false)
+		return
+	await _click(_at(pw))
+	check("click selects our building", inp.sel.size() == 1 and inp.sel[0] == pw)
 	await _frames(8)
+	pw.hp = pw.max_hp * 0.5  # (test: damaged, so there is something to repair)
 	var cr := g.me.credits
 	await _click(_ctl("Act_repair"))
 	check("repair button", pw.repairing)
