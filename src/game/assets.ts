@@ -14,6 +14,13 @@ export interface UnitArt {
   /** infantry: the two steps of a walk; harvester: loaded */
   alt?: Rot
   alt2?: Rot
+  /** a soldier taking aim */
+  aim?: Rot
+  /** tracks one link on, alternating with the hull while driving */
+  hull2?: Rot
+  /** frames that turn all the time: a ship's radar, a flak tank's radar */
+  hullAnim?: Rot[]
+  turretAnim?: Rot[]
   wreck?: Rot
   wreckTurret?: Rot
   mount: [number, number, number]
@@ -226,9 +233,13 @@ export async function buildAssets(onProgress: (t: number, what: string) => void)
         }
         if (inf) {
           art.alt = new Rot(um.alt!, dirs, {}, false)
-          art.alt2 = new Rot(um.turret!, dirs, {}, false)
+          art.alt2 = new Rot(um.alt2!, dirs, {}, false)
+          art.aim = new Rot(um.aim!, dirs, {}, false)
         } else {
           if (um.turret) art.turret = new Rot(um.turret, 32, {}, false)
+          if (um.turretAnim) art.turretAnim = um.turretAnim.map((t) => new Rot(t, 32, {}, false))
+          if (um.hull2) art.hull2 = new Rot(um.hull2, dirs, {}, false)
+          if (um.hullAnim) art.hullAnim = um.hullAnim.map((h) => new Rot(h, dirs, {}, false))
           if (um.alt) art.alt = new Rot(um.alt, dirs, {}, false)
           if (key !== 'jet') {
             art.wreck = new Rot(um.hull, 16, { dark: 0.42 }, false)

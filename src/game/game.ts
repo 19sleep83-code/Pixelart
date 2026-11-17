@@ -1074,7 +1074,9 @@ export class Game {
         } else if (!u.air && !def.infantry) {
           u.wakeT = 0.18
           const t = this.map.ter[this.map.idx(Math.floor(u.x), Math.floor(u.y))]
-          if (t !== Ter.Road && t !== Ter.Bridge && t !== Ter.Grass) this.addFx('dust', u.x - Math.cos(u.dir) * 0.4, u.y - Math.sin(u.dir) * 0.4, 1, 0, 0, 3, 0.9, 1)
+          if (t !== Ter.Road && t !== Ter.Bridge && t !== Ter.Grass) this.addFx('dust', u.x - Math.cos(u.dir) * 0.5, u.y - Math.sin(u.dir) * 0.5, 1, 0, 0, 3, 0.9, 1)
+          // exhaust from the engine deck
+          if (this.rand() < 0.6) this.addFx('smoke', u.x - Math.cos(u.dir) * u.radius * 0.8, u.y - Math.sin(u.dir) * u.radius * 0.8, 6, -Math.cos(u.dir) * 0.2, -Math.sin(u.dir) * 0.2, 6, 0.8, 0)
         }
       }
     }

@@ -109,8 +109,8 @@ export class Renderer {
       } else {
         const s = this.toScreen(e.x, e.y, e.z)
         if (e.carriedBy) continue
-        const r = e.u!.infantry ? 5 : e.naval ? (e.radius > 0.7 ? 20 : 13) : 9
-        const cy = s.y - (e.u!.infantry ? 5 : e.naval ? 6 : 4)
+        const r = e.u!.infantry ? 7 : e.naval ? (e.radius > 0.9 ? 26 : 17) : 13
+        const cy = s.y - (e.u!.infantry ? 8 : e.naval ? 8 : 6)
         if (Math.abs(px - s.x) <= r && Math.abs(py - cy) <= r) {
           const k = e.x + e.y + (e.air ? 100 : 0)
           if (k > bk) {
@@ -248,7 +248,7 @@ export class Renderer {
       if (e.isB) continue
       {
         const s = scr(e.x, e.y)
-        const r = e.u!.infantry ? 4 : Math.round(e.u!.radius * (e.naval ? 26 : 22))
+        const r = e.u!.infantry ? 5 : Math.round(e.u!.radius * (e.naval ? 24 : 22))
         ctx.globalAlpha = e.selected ? 1 : 0.55
         ctx.drawImage(this.ring(r, col), s.x - r - 1, s.y - Math.floor(r / 2) - 1)
         ctx.globalAlpha = 1
@@ -556,9 +556,9 @@ export class Renderer {
         y = s.y - art.body.ay + 2
       } else {
         const s = scr(e.x, e.y, e.z)
-        w = e.u!.infantry ? 8 : e.naval ? (e.radius > 0.7 ? 26 : 18) : 14
+        w = e.u!.infantry ? 10 : e.naval ? (e.radius > 0.9 ? 30 : 22) : 18
         x = s.x - w / 2
-        y = s.y - (e.u!.infantry ? 15 : e.air ? 22 : e.naval ? (e.radius > 0.7 ? 30 : 20) : 16)
+        y = s.y - (e.u!.infantry ? 22 : e.air ? 28 : e.naval ? (e.radius > 0.9 ? 40 : 28) : 22)
       }
       ctx.fillStyle = '#0c0e0a'
       ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, 4)
@@ -677,21 +677,26 @@ export class Renderer {
     // a sniper in hiding is a ghost to its own side
     if (e.hidden) ctx.globalAlpha = 0.45
     if (e.u!.infantry) {
-      const fr = e.moving ? (Math.floor(e.anim * 7) % 2 ? art.alt! : art.alt2!) : art.hull
+      const aiming = !e.moving && (g.time - e.firedT < 0.8 || (!!e.target && !e.target.dead))
+      const fr = e.moving ? (Math.floor(e.anim * 7) % 2 ? art.alt! : art.alt2!) : aiming && art.aim ? art.aim : art.hull
       this.drawSprite(fr.at(e.dir), s.x, s.y)
       if (flash) this.flashSprite(fr.at(e.dir), s.x, s.y)
       ctx.globalAlpha = 1
       return
     }
-    const hull = e.u!.harvester && e.cargo > 0 && art.alt ? art.alt : art.hull
+    // the tracks run while it drives; radars on ships keep turning
+    let hull = e.u!.harvester && e.cargo > 0 && art.alt ? art.alt : art.hull
+    if (art.hull2 && e.moving && Math.floor(e.anim * 12) % 2) hull = art.hull2
+    if (art.hullAnim) hull = art.hullAnim[Math.floor(g.time * 3 + e.id) % art.hullAnim.length]
+    const turret = art.turretAnim ? art.turretAnim[Math.floor(g.time * 4 + e.id) % art.turretAnim.length] : art.turret
     // a little bounce while driving, a slow roll on the water
     const bob = e.naval ? Math.round(Math.sin(g.time * 1.4 + e.id) * 0.7) : e.moving && !e.air && Math.floor(e.anim * 8) % 2 ? -1 : 0
     this.drawSprite(hull.at(e.dir), s.x, s.y + bob)
     if (flash) this.flashSprite(hull.at(e.dir), s.x, s.y + bob)
-    if (art.turret) {
+    if (turret) {
       const [dx, dy] = mountOffset(art.mount, e.dir)
-      this.drawSprite(art.turret.at(e.tdir), s.x + dx, s.y + dy + bob)
-      if (flash) this.flashSprite(art.turret.at(e.tdir), s.x + dx, s.y + dy + bob)
+      this.drawSprite(turret.at(e.tdir), s.x + dx, s.y + dy + bob)
+      if (flash) this.flashSprite(turret.at(e.tdir), s.x + dx, s.y + dy + bob)
     }
     ctx.globalAlpha = 1
     if (e.jet && e.js !== 'park' && e.z > 3) {

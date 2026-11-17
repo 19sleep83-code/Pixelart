@@ -124,7 +124,8 @@ vollständige Datenkarte mit Schaden, Reichweite, Panzerung und Zielen.
 | --- | --- |
 | `src/core/voxel.ts` | Voxel-Modelle und der Renderer, der daraus Sprites macht |
 | `src/core/iso.ts` | isometrische Projektion und Farbhilfen |
-| `src/game/models.ts` | alle Modelle: Fahrzeuge, Soldaten, Schiffe, Jets, Gebäude, Landschaft, Logo |
+| `src/game/units3d.ts` | alle Einheiten nach realen Vorbildern, mit Animationsbildern (Ketten, Radare, Lauf- und Zielhaltung) |
+| `src/game/models.ts` | Gebäude, Landschaft, Logo |
 | `src/game/map.ts` | Kartengenerator für Binnenland, Küste und Seenplatte |
 | `src/game/terrain.ts` | malt den Boden einmal in ein großes Bild |
 | `src/game/atmos.ts` | Wasser und Brandung, Wolken, Tageszeit, Lichter, Regen, Filmkorn |
