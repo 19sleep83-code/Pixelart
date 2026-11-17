@@ -631,9 +631,8 @@ func _find_spot(key: String) -> Variant:
 	var hh := dh / 2
 	for r in range(2, far + 1):
 		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				if maxi(absi(dx), absi(dy)) != r:
-					continue
+			# the ring only (the same order as the square with the inside skipped)
+			for dx in range(-r, r + 1, 1 if dy == -r or dy == r else 2 * r):
 				var tx := floori(hq.x) + dx - hw
 				var ty := floori(hq.y) + dy - hh
 				# (both checks are pure, the cheap one first)
@@ -681,9 +680,8 @@ func _ore_dist(x: float, y: float) -> float:
 		if bd <= r:
 			break
 		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				if maxi(absi(dx), absi(dy)) != r:
-					continue
+			# the ring only (the same order as the square with the inside skipped)
+			for dx in range(-r, r + 1, 1 if dy == -r or dy == r else 2 * r):
 				var tx := fx + dx
 				var ty := fy + dy
 				if tx < 0 or ty < 0 or tx >= N or ty >= N:

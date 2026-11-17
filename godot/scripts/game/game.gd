@@ -1054,9 +1054,8 @@ func formation(x: float, y: float, units: Array[Ent], naval: bool) -> Array[Vect
 	var r := 0
 	while r < rmax and tiles.size() < need * 1.6 + 1:
 		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				if maxi(absi(dx), absi(dy)) != r:
-					continue
+			# the ring only (the same order as the square with the inside skipped)
+			for dx in range(-r, r + 1, 1 if dy == -r or dy == r else 2 * r):
 				if not pfn.ok(cx + dx, cy + dy):
 					continue
 				tiles.append(Vector2i(cx + dx, cy + dy))
@@ -1393,9 +1392,8 @@ func shore_point(x: float, y: float, max_r: int = 24) -> Variant:
 		var bl := Vector2()
 		var bd := 1e9
 		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				if maxi(absi(dx), absi(dy)) != r:
-					continue
+			# the ring only (the same order as the square with the inside skipped)
+			for dx in range(-r, r + 1, 1 if dy == -r or dy == r else 2 * r):
 				var wx := cx + dx
 				var wy := cy + dy
 				if not m.nav(wx, wy) or m.ter[m.idx(wx, wy)] == GameMap.BRIDGE:
@@ -2169,9 +2167,8 @@ func find_ore(x: float, y: float, self_: Ent) -> int:
 		if best >= 0 and r > bd + 2:
 			break
 		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				if maxi(absi(dx), absi(dy)) != r:
-					continue
+			# the ring only (the same order as the square with the inside skipped)
+			for dx in range(-r, r + 1, 1 if dy == -r or dy == r else 2 * r):
 				var tx := cx + dx
 				var ty := cy + dy
 				if not m.in_map(tx, ty):

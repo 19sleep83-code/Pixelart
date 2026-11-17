@@ -197,3 +197,10 @@ urad, base_sight, armor_i, turret, w_range, w_min, w_gap, w_burst, w_cls_i, w_gr
   in JS (`Game.sort_order`); die eine Sortierung der KI mit inkonsistentem Vergleich bildet V8 nach.
 - `Math.random()` → `randf()`; tote Einheiten lassen ihre Verweise los (keine Ringverweise).
 - Spielbare Einheiten: `Player.units` enthält nur Einheiten ohne `planned` (wie im Browser).
+
+### Tests der Simulation
+
+- `… runner.tscn -- sim_scenarios` – Häuser, Bunker, Pionier, Landungsschiff, Jets, Träger (PASS/FAIL je Prüfung).
+- `… runner.tscn -- sim_aivai [Minuten] [seed:karte …]` – KI gegen KI wie `balance/aivai.ts` (Sieger, Dauer,
+  Verluste, gebaute Einheiten, ms je Tick); `sim_aivai stress [je Seite] [seed:karte]` – Massenschlacht, ms je Tick.
+- `… runner.tscn -- sim_timeline [seed] [karte] [Minuten]` – Verlauf alle 30 s zum Vergleich mit dem Prototyp.
