@@ -19,6 +19,8 @@ export class Input {
   private lastGroup = { n: -1, t: 0 }
   paused = false
   onChange: () => void = () => {}
+  /** keys the command bar handles (production, tabs); returns true if used */
+  onHotkey: (e: KeyboardEvent) => boolean = () => false
   onPause: () => void = () => {}
 
   constructor(public game: Game, public r: Renderer, public el: HTMLCanvasElement, public scale: () => number, signal: AbortSignal) {
@@ -117,7 +119,7 @@ export class Input {
       const x0 = Math.min(box.x0, box.x1), x1 = Math.max(box.x0, box.x1)
       const y0 = Math.min(box.y0, box.y1), y1 = Math.max(box.y0, box.y1)
       const picked = g.ents.filter((u) => {
-        if (u.isB || u.dead || u.owner !== 0) return false
+        if (u.isB || u.dead || u.owner !== 0 || u.carriedBy) return false
         const s = this.r.toScreen(u.x, u.y, u.z)
         return s.x >= x0 && s.x <= x1 && s.y - 4 >= y0 && s.y - 4 <= y1
       })
@@ -177,8 +179,18 @@ export class Input {
       this.overlay.moveMark = { x: w.x, y: w.y, t: g.time, attack: false }
       return
     }
+    // ground troops onto our landing ship
+    if (hit && hit.owner === 0 && hit.u?.transport) {
+      const troops = units.filter((u) => !u.air && !u.naval)
+      if (troops.length) {
+        g.commandBoard(troops, hit)
+        this.overlay.moveMark = { x: hit.x, y: hit.y, t: g.time, attack: false }
+        g.onSound('ack', 0, 0)
+        return
+      }
+    }
     if (hit && hit.owner !== 0) {
-      const can = units.filter((u) => g.canHit(u, hit))
+      const can = units.filter((u) => g.canHit(u, hit) || u.jet)
       g.commandAttack(can, hit)
       const rest = units.filter((u) => !can.includes(u))
       if (rest.length) g.commandMove(rest, hit.x, hit.y, false)
@@ -213,6 +225,10 @@ export class Input {
       return
     }
     if (this.paused) return
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && this.onHotkey(e)) {
+      e.preventDefault()
+      return
+    }
     if (k === 'Escape') {
       if (this.place || this.attackMode) {
         this.place = null
@@ -231,7 +247,7 @@ export class Input {
       }
       const ids = this.groups.get(n)
       if (!ids) return
-      const list = ids.map((id) => g.byId.get(id)).filter((x): x is Ent => !!x && !x.dead)
+      const list = ids.map((id) => g.byId.get(id)).filter((x): x is Ent => !!x && !x.dead && !x.carriedBy)
       this.setSel(list)
       const now = performance.now()
       if (this.lastGroup.n === n && now - this.lastGroup.t < 400 && list.length) this.r.lookAt(list[0].x, list[0].y)
@@ -247,6 +263,9 @@ export class Input {
         break
       case 's':
         g.commandStop(this.sel.filter((s) => s.owner === 0))
+        break
+      case 'd':
+        for (const t of this.sel) if (t.owner === 0 && t.u?.transport) g.commandUnload(t)
         break
       case 'h': {
         const hq = g.ents.find((e) => e.owner === 0 && e.key === 'hq') ?? g.ents.find((e) => e.owner === 0 && e.isB)
@@ -302,7 +321,7 @@ export class Input {
   /** hover feedback and the building ghost */
   frame() {
     const g = this.game
-    this.sel = this.sel.filter((s) => !s.dead)
+    if (this.sel.some((s) => s.dead || s.carriedBy)) this.setSel(this.sel.filter((s) => !s.dead && !s.carriedBy))
     const p = this.mouse
     this.overlay.hoverEnt = p.inside && !this.overlay.box ? this.r.pick(p.x, p.y) : null
     if (this.place) {
@@ -316,6 +335,7 @@ export class Input {
     if (this.place) cur = 'cell'
     else if (this.attackMode) cur = 'crosshair'
     else if (h && h.owner !== 0 && mine) cur = 'crosshair'
+    else if (h && h.owner === 0 && h.u?.transport && this.sel.some((s) => !s.isB && !s.naval && !s.air)) cur = 'alias'
     else if (h) cur = 'pointer'
     else if (mine) {
       const w = this.r.toWorld(p.x, p.y)

@@ -290,7 +290,8 @@ function harvester(f: Faction, loaded: boolean): Vox {
   return m
 }
 
-function soldier(f: Faction, step: number, at: boolean): Vox {
+function soldier(f: Faction, step: number, kind: 'rifle' | 'at' | 'sniper'): Vox {
+  const at = kind === 'at'
   const s = SCHEMES[f]
   const m = new Vox(7, 7, 10)
   const legA = step === 0 ? 3 : step === 1 ? 4 : 2
@@ -312,6 +313,13 @@ function soldier(f: Faction, step: number, at: boolean): Vox {
     m.box(5, 0, 6, 5, 6, 6, s.camo2)
     m.set(5, 6, 6, s.team)
     m.set(5, 0, 6, s.dark)
+  } else if (kind === 'sniper') {
+    // a long rifle and a ghillie cape
+    m.box(4, 3, 4, 4, 7, 4, s.metal)
+    m.set(4, 5, 5, s.dark)
+    m.paint((x, y, z, c) => (z >= 3 && z <= 7 && c !== COL.skin && c !== s.metal && hash3(x, y, z) < 0.45 ? (hash3(z, x, y) < 0.5 ? COL.leaf1 : COL.leaf2) : c))
+    m.set(2, 1, 4, COL.leaf1)
+    m.set(4, 1, 5, COL.leaf2)
   } else {
     m.box(4, 4, 4, 4, 6, 4, s.metal)
   }
@@ -374,9 +382,17 @@ export function unitModel(key: string, f: Faction): UnitModel {
     case 'art': return artillery(f)
     case 'aa': return flak(f)
     case 'harv': return { hull: harvester(f, false), alt: harvester(f, true) }
-    case 'rifle': return { hull: soldier(f, 0, false), alt: soldier(f, 1, false), turret: soldier(f, 2, false), muzzle: [3, 4] }
-    case 'at': return { hull: soldier(f, 0, true), alt: soldier(f, 1, true), turret: soldier(f, 2, true), muzzle: [4, 6] }
+    case 'rifle': return { hull: soldier(f, 0, 'rifle'), alt: soldier(f, 1, 'rifle'), turret: soldier(f, 2, 'rifle'), muzzle: [3, 4] }
+    case 'at': return { hull: soldier(f, 0, 'at'), alt: soldier(f, 1, 'at'), turret: soldier(f, 2, 'at'), muzzle: [4, 6] }
+    case 'sniper': return { hull: soldier(f, 0, 'sniper'), alt: soldier(f, 1, 'sniper'), turret: soldier(f, 2, 'sniper'), muzzle: [4, 4] }
     case 'heli': return heli(f)
+    case 'scout': return scout(f)
+    case 'jet': return jet(f)
+    case 'boat': return boat(f)
+    case 'corvette': return corvette(f)
+    case 'destroyer': return destroyer(f)
+    case 'lander': return lander(f)
+    case 'carrier': return carrier(f)
   }
   throw new Error('unknown unit ' + key)
 }
@@ -680,6 +696,8 @@ export function buildingModel(key: string, f: Faction): BuildingModel {
     case 'helipad': return { body: helipad(f) }
     case 'bunker': return { body: bunker(f), turret: bunkerGun(f), mount: [0, 0, 6] }
     case 'rocket': return { body: rocketSite(f), turret: rocketLauncher(f), mount: [0, 0, 1] }
+    case 'airfield': return { body: airfield(f) }
+    case 'shipyard': return { body: shipyard(f) }
   }
   throw new Error('unknown building ' + key)
 }
@@ -811,5 +829,354 @@ export function oreModel(stage: number, seed: number): Vox {
     if (h < 0.42) return COL.ore2
     return c
   })
+  return m
+}
+
+// ─────────────────────────────────────────────────────────── new vehicles, aircraft and ships
+
+function scout(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const m = new Vox(10, 16, 8)
+  for (const y of [3, 11]) {
+    m.cylX(y + 0.5, 1.5, 1.7, 0, 1, s.track)
+    m.cylX(y + 0.5, 1.5, 1.7, 8, 9, s.track)
+    m.set(0, y, 1, shade(s.metal, 1.4))
+    m.set(9, y, 1, shade(s.metal, 1.4))
+  }
+  m.box(1, 0, 2, 8, 15, 4, s.base)
+  m.box(1, 13, 4, 8, 15, 4, -1)
+  m.box(1, 15, 3, 8, 15, 3, -1)
+  m.box(2, 9, 5, 7, 12, 5, s.base)
+  m.box(2, 12, 5, 7, 12, 5, s.glass)
+  m.box(1, 1, 4, 8, 1, 4, s.team)
+  camo(m, s, 71)
+  m.py = 8
+  const t = new Vox(5, 9, 3)
+  t.box(0, 0, 0, 4, 4, 1, s.base)
+  t.box(2, 4, 1, 2, 8, 1, s.metal)
+  t.set(2, 1, 2, s.team)
+  t.px = 2.5
+  t.py = 2.5
+  camo(t, s, 72)
+  return { hull: m, turret: t, mount: [0, -1, 6], muzzle: [7, 1] }
+}
+
+function jet(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const m = new Vox(18, 26, 8)
+  const c = f === 'nato' ? s.jet : s.jet2
+  const c2 = f === 'nato' ? s.jet2 : s.jet
+  m.box(8, 2, 2, 9, 21, 3, c) // fuselage
+  m.box(8, 22, 2, 9, 23, 2, c)
+  m.set(8, 24, 2, s.metal)
+  m.box(8, 15, 4, 9, 18, 4, s.glass) // canopy
+  m.box(7, 4, 2, 10, 12, 2, c2) // intakes and engine
+  m.box(8, 0, 2, 9, 1, 3, s.metal) // nozzles
+  // swept wings
+  for (let y = 5; y <= 14; y++) {
+    const span = Math.round((14 - y) * 0.85) + 1
+    m.box(8 - span, y, 2, 9 + span, y, 2, y % 3 === 0 ? c2 : c)
+  }
+  // tailplanes
+  for (let y = 0; y <= 3; y++) {
+    const span = 4 - y
+    m.box(8 - span - 1, y, 2, 9 + span + 1, y, 2, c)
+  }
+  if (f === 'nato') {
+    m.box(8, 1, 4, 9, 4, 6, c)
+    m.box(8, 1, 6, 9, 2, 7, s.team)
+  } else {
+    m.box(6, 1, 4, 6, 4, 6, c)
+    m.box(11, 1, 4, 11, 4, 6, c)
+    m.set(6, 2, 6, s.team)
+    m.set(11, 2, 6, s.team)
+  }
+  m.set(3, 9, 2, s.team)
+  m.set(14, 9, 2, s.team)
+  m.set(4, 8, 1, s.metal) // missiles under the wings
+  m.set(13, 8, 1, s.metal)
+  m.px = 9
+  m.py = 12
+  return { hull: m, muzzle: [8, 0] }
+}
+
+/** a ship's hull: pointed bow, square stern, a dark line at the water */
+function shipHull(m: Vox, w: number, l: number, h: number, bow: number, c: number, dark: number) {
+  const cx = (w - 1) / 2
+  for (let y = 0; y < l; y++) {
+    const k = y > l - 1 - bow ? (l - 1 - y) / bow : 1
+    const half = Math.max(0.4, (w / 2) * Math.sqrt(k))
+    for (let x = 0; x < w; x++) {
+      if (Math.abs(x - cx) > half) continue
+      for (let z = 0; z < h; z++) m.set(x, y, z, z === 0 ? dark : c)
+    }
+  }
+  // a little sheer: the bow stands higher
+  for (let y = l - bow; y < l; y++)
+    for (let x = 0; x < w; x++) if (m.get(x, y, h - 1)) m.set(x, y, h, c)
+}
+
+function boat(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const m = new Vox(8, 22, 8)
+  shipHull(m, 8, 22, 3, 8, s.navy, s.navy2)
+  m.box(1, 1, 3, 6, 15, 3, s.deck)
+  m.box(2, 7, 4, 5, 12, 6, s.navy)
+  m.box(2, 12, 5, 5, 12, 6, s.glass)
+  m.box(3, 9, 7, 4, 10, 7, s.team)
+  m.box(3, 2, 4, 4, 3, 4, s.navy2)
+  m.py = 11
+  const t = new Vox(4, 8, 3)
+  t.box(0, 0, 0, 3, 3, 1, s.navy2)
+  t.box(1, 3, 1, 2, 7, 1, s.metal)
+  t.px = 2
+  t.py = 2
+  return { hull: m, turret: t, mount: [0, 5, 4], muzzle: [6, 1] }
+}
+
+function corvette(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const m = new Vox(10, 32, 13)
+  shipHull(m, 10, 32, 4, 10, s.navy, s.navy2)
+  m.box(1, 0, 4, 8, 22, 4, s.deck)
+  m.box(2, 9, 5, 7, 19, 8, s.navy)
+  m.box(2, 19, 7, 7, 19, 8, s.glass)
+  m.box(3, 13, 9, 6, 17, 9, s.navy2)
+  m.box(4, 14, 10, 5, 15, 12, s.metal) // mast
+  m.box(3, 14, 12, 6, 14, 12, s.metal)
+  m.box(3, 5, 5, 6, 8, 7, s.navy2) // funnel block
+  m.box(2, 1, 5, 7, 4, 5, s.deck) // helideck
+  m.set(4, 2, 5, COL.white)
+  m.set(5, 3, 5, COL.white)
+  m.box(2, 17, 8, 2, 17, 8, s.team)
+  m.box(7, 17, 8, 7, 17, 8, s.team)
+  m.py = 16
+  const t = new Vox(5, 11, 4)
+  t.box(0, 0, 0, 4, 4, 2, s.navy)
+  t.box(2, 4, 1, 2, 10, 1, s.metal)
+  t.px = 2.5
+  t.py = 2.5
+  return { hull: m, turret: t, mount: [0, 9, 5], muzzle: [9, 1.5] }
+}
+
+function destroyer(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const nato = f === 'nato'
+  const L = nato ? 46 : 48
+  const W = nato ? 12 : 13
+  const m = new Vox(W, L, 18)
+  shipHull(m, W, L, 5, 13, s.navy, s.navy2)
+  m.box(1, 0, 5, W - 2, L - 14, 5, s.deck)
+  const cx = Math.floor(W / 2)
+  if (nato) {
+    // angular superstructure with a pyramid mast
+    m.box(2, 14, 6, W - 3, 28, 10, s.navy)
+    m.box(3, 28, 8, W - 4, 29, 10, s.glass)
+    for (let z = 11; z <= 16; z++) {
+      const k = Math.max(0, 3 - Math.floor((z - 11) / 2))
+      m.box(cx - k, 20 - k, z, cx - 1 + k, 22 + k, z, s.navy2)
+    }
+    m.box(cx - 1, 21, 17, cx, 21, 17, s.team)
+    m.box(cx - 2, 9, 6, cx + 1, 12, 9, s.navy2) // funnel
+    // missile cells
+    for (const y0 of [31, 5])
+      for (let y = y0; y <= y0 + 3; y++)
+        for (let x = 2; x <= W - 3; x++) m.set(x, y, 6, (x + y) % 2 ? s.track : s.navy2)
+  } else {
+    // tall superstructure, big slanted launch tubes along both sides
+    m.box(3, 13, 6, W - 4, 27, 11, s.navy)
+    m.box(4, 27, 9, W - 5, 28, 11, s.glass)
+    m.box(cx - 1, 18, 12, cx + 1, 21, 16, s.navy2)
+    m.ball(cx, 19.5, 17, 2.2, 2.2, 1.6, COL.white) // radar dome
+    for (let k = 0; k < 4; k++) {
+      for (const x of [0, W - 2]) m.box(x, 29 + k * 2, 6, x + 1, 30 + k * 2, 7 + Math.floor(k / 2), s.camo2)
+    }
+    m.box(cx - 2, 8, 6, cx + 1, 11, 10, s.navy2)
+    m.box(cx - 1, 10, 11, cx, 10, 11, s.team)
+  }
+  m.box(2, 1, 6, W - 3, 4, 6, s.deck)
+  m.set(cx - 1, 2, 6, COL.white)
+  m.set(cx, 3, 6, COL.white)
+  m.py = L / 2
+  const t = new Vox(6, 13, 4)
+  t.box(0, 0, 0, 5, 5, 2, s.navy)
+  t.box(0, 5, 2, 5, 5, 2, -1)
+  t.box(2, 5, 1, 3, 12, 1, s.metal)
+  t.px = 3
+  t.py = 3
+  return { hull: m, turret: t, mount: [0, nato ? 15 : 16, 6], muzzle: [10, 1.5] }
+}
+
+function lander(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const m = new Vox(12, 28, 12)
+  // a blunt, flat hull with a ramp at the bow
+  for (let y = 0; y < 28; y++)
+    for (let x = 0; x < 12; x++) {
+      const bow = y > 24 ? (y - 24) : 0
+      if (bow && (x < bow - 1 || x > 12 - bow)) continue
+      m.box(x, y, 0, x, y, 3, y === 27 ? s.navy2 : s.navy)
+      m.set(x, y, 0, s.navy2)
+    }
+  m.box(2, 8, 2, 9, 25, 3, -1)
+  m.box(2, 8, 1, 9, 25, 1, s.deck) // the well deck
+  for (let y = 9; y <= 24; y += 3) m.box(3, y, 2, 8, y, 2, shade(s.deck, 0.85))
+  m.box(1, 26, 3, 10, 27, 4, COL.hazard) // the ramp
+  m.box(1, 0, 4, 10, 7, 7, s.navy) // bridge
+  m.box(1, 7, 6, 10, 7, 7, s.glass)
+  m.box(5, 2, 8, 6, 3, 11, s.metal)
+  m.box(2, 3, 8, 9, 3, 8, s.team)
+  m.py = 14
+  return { hull: m }
+}
+
+function carrier(f: Faction): UnitModel {
+  const s = SCHEMES[f]
+  const W = 20, L = 64
+  const m = new Vox(W, L, 20)
+  // the hull is narrower than the flight deck above it
+  const cx = (W - 1) / 2
+  for (let y = 0; y < L; y++) {
+    const k = y > L - 15 ? (L - 1 - y) / 14 : 1
+    const half = Math.max(1, 7 * Math.sqrt(k))
+    for (let x = 0; x < W; x++) if (Math.abs(x - cx) <= half) m.box(x, y, 0, x, y, 4, x === 0 || y === 0 ? s.navy2 : s.navy)
+    for (let x = 0; x < W; x++) if (Math.abs(x - cx) <= half) m.set(x, y, 0, s.navy2)
+  }
+  // flight deck with markings
+  for (let y = 2; y < L - 1; y++) {
+    const k = y > L - 9 ? (L - 1 - y) / 8 : 1
+    const half = Math.max(1.5, 9.5 * Math.sqrt(k))
+    for (let x = 0; x < W; x++) if (Math.abs(x - cx) <= half) m.set(x, y, 5, s.deck)
+  }
+  for (let y = 4; y < L - 6; y += 4) m.set(cx, y, 5, COL.white)
+  for (let y = 4; y < 26; y++) m.set(Math.round(4 + (y - 4) * 0.25), y, 5, COL.hazard) // angled landing line
+  // the island
+  m.box(15, 26, 6, 18, 40, 12, s.navy)
+  m.box(15, 39, 10, 18, 40, 11, s.glass)
+  m.box(16, 32, 13, 17, 34, 18, s.metal)
+  m.box(15, 33, 18, 18, 33, 18, s.metal)
+  m.box(15, 28, 13, 18, 30, 14, s.navy2)
+  m.set(16, 29, 15, s.team)
+  // jets parked on deck
+  for (const [jx, jy] of [[4, 44], [8, 46], [4, 50], [12, 8]]) {
+    m.box(jx, jy, 6, jx + 1, jy + 5, 6, s.jet2)
+    m.box(jx - 2, jy + 2, 6, jx + 3, jy + 3, 6, s.jet2)
+    m.set(jx, jy + 5, 7, s.glass)
+  }
+  m.px = W / 2
+  m.py = L / 2
+  return { hull: m }
+}
+
+function airfield(f: Faction): Vox {
+  const s = SCHEMES[f]
+  const m = new BVox(64, 48, 22)
+  m.box(1, 1, 0, 62, 46, 0, COL.concrete2)
+  // runway along x with markings
+  m.box(1, 3, 0, 62, 16, 0, COL.asphalt)
+  for (let x = 4; x < 60; x += 6) m.box(x, 9, 0, x + 2, 10, 0, COL.white)
+  for (const x of [3, 59]) for (let y = 5; y <= 14; y += 2) m.set(x, y, 0, COL.white)
+  for (let x = 1; x <= 62; x += 3) {
+    m.set(x, 2, 1, COL.hazard, true)
+    m.set(x, 17, 1, COL.hazard, true)
+  }
+  // parking spots
+  for (const x of [9, 27, 45]) {
+    for (let k = -7; k <= 7; k++) {
+      m.set(x + k, 26, 0, COL.hazard)
+      m.set(x + k, 45, 0, COL.hazard)
+    }
+    m.box(x - 8, 26, 0, x - 8, 45, 0, COL.hazard)
+  }
+  // hangar and tower
+  for (let x = 55; x <= 62; x++) {
+    const t = (x - 58.5) / 4
+    const top = Math.round(8 * Math.sqrt(Math.max(0, 1 - t * t)))
+    m.box(x, 24, 1, x, 45, Math.max(1, top), x % 2 ? COL.steel : COL.steelDark)
+  }
+  m.box(56, 45, 1, 61, 45, 5, COL.asphalt)
+  m.box(52, 20, 1, 56, 23, 14, COL.concrete3)
+  m.box(51, 19, 15, 57, 24, 17, COL.glass)
+  m.box(51, 19, 18, 57, 24, 18, COL.concrete2)
+  m.box(54, 21, 19, 54, 21, 21, COL.steelDark)
+  m.set(54, 21, 21, s.team, true)
+  m.box(1, 45, 1, 8, 46, 1, s.team)
+  return m
+}
+
+function shipyard(f: Faction): Vox {
+  const s = SCHEMES[f]
+  const m = new BVox(48, 48, 30)
+  m.box(1, 1, 0, 46, 46, 0, COL.concrete2)
+  // slipway with a hull being built
+  m.box(4, 16, 0, 43, 31, 0, COL.asphalt)
+  for (let x = 6; x <= 40; x++) {
+    const t = Math.abs(x - 23) / 18
+    const half = Math.round(5 * Math.sqrt(Math.max(0, 1 - t * t * t)))
+    m.box(x, 24 - half, 1, x, 24 + half, 4, x > 30 ? COL.rust : s.navy2)
+    if (x % 4 === 0) m.box(x, 18, 1, x, 30, 5, COL.steelDark)
+  }
+  // crane gantry over the slipway
+  for (const x of [5, 42]) {
+    m.box(x, 14, 1, x, 14, 22, COL.hazard)
+    m.box(x, 33, 1, x, 33, 22, COL.hazard)
+  }
+  m.box(5, 14, 23, 42, 14, 23, COL.hazard)
+  m.box(5, 33, 23, 42, 33, 23, COL.hazard)
+  m.box(20, 14, 22, 23, 33, 22, COL.steelDark)
+  m.box(21, 24, 12, 21, 24, 21, COL.steelDark)
+  // workshop
+  m.box(4, 36, 1, 30, 46, 10, COL.brick)
+  m.box(4, 36, 11, 30, 46, 11, COL.roofDark)
+  windowsX(m, 6, 28, 46, 4, 6, 3, 0.4)
+  m.box(34, 37, 1, 44, 45, 6, COL.concrete3)
+  m.box(4, 2, 1, 44, 3, 2, COL.concrete3) // quay wall
+  for (let x = 6; x < 44; x += 6) m.box(x, 4, 1, x, 4, 2, COL.black) // bollards
+  m.box(4, 46, 9, 30, 46, 9, s.team)
+  flag(m, 46, 36, 20, s)
+  return m
+}
+
+// ─────────────────────────────────────────────────────────── the title
+
+const GLYPHS: Record<string, string[]> = {
+  P: ['1111 ', '1   1', '1   1', '1111 ', '1    ', '1    ', '1    '],
+  I: ['111', ' 1 ', ' 1 ', ' 1 ', ' 1 ', ' 1 ', '111'],
+  X: ['1   1', '1   1', ' 1 1 ', '  1  ', ' 1 1 ', '1   1', '1   1'],
+  E: ['11111', '1    ', '1    ', '1111 ', '1    ', '1    ', '11111'],
+  L: ['1    ', '1    ', '1    ', '1    ', '1    ', '1    ', '11111'],
+  F: ['11111', '1    ', '1    ', '1111 ', '1    ', '1    ', '1    '],
+  R: ['1111 ', '1   1', '1   1', '1111 ', '1 1  ', '1  1 ', '1   1'],
+  O: [' 111 ', '1   1', '1   1', '1   1', '1   1', '1   1', ' 111 '],
+  N: ['1   1', '11  1', '1 1 1', '1  11', '1   1', '1   1', '1   1'],
+  T: ['11111', '  1  ', '  1  ', '  1  ', '  1  ', '  1  ', '  1  '],
+}
+
+/** chunky voxel letters, standing up and facing the viewer */
+export function titleModel(text: string): Vox {
+  const B = 3
+  let width = 0
+  for (const ch of text) width += (GLYPHS[ch]?.[0].length ?? 3) + 1
+  const m = new Vox(5, width * B + 2, 7 * B + 2)
+  let y0 = 1
+  const gold = COL.yellow, gold2 = shade(COL.yellow, 0.7)
+  for (const ch of text) {
+    const g = GLYPHS[ch]
+    if (!g) {
+      y0 += 4 * B
+      continue
+    }
+    for (let row = 0; row < 7; row++)
+      for (let col = 0; col < g[row].length; col++) {
+        if (g[row][col] !== '1') continue
+        const z = (6 - row) * B + 1
+        m.box(0, y0 + col * B, z, 3, y0 + col * B + B - 1, z + B - 1, gold)
+        m.box(0, y0 + col * B, z, 0, y0 + col * B + B - 1, z + B - 1, gold2)
+      }
+    y0 += (g[0].length + 1) * B
+  }
+  m.px = 2.5
+  m.py = m.l / 2
+  m.pz = 0
   return m
 }

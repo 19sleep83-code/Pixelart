@@ -13,6 +13,7 @@ export const enum Ter {
   Ore = 5,
   Bridge = 6,
   Dirt = 7,
+  Sand = 8,
 }
 
 export type StaticKind = 'oak' | 'pine' | 'birch' | 'house' | 'timber' | 'church' | 'barn'
@@ -38,6 +39,9 @@ export class GameMap {
   statics: Static[] = []
   tileStatics: (Static[] | undefined)[]
   starts: { x: number; y: number }[] = []
+  type: MapType = 'land'
+  /** for each water tile: how many tiles to the nearest land (capped) */
+  depth: Uint8Array
   constructor(public N: number, public seed: number) {
     const n = N * N
     this.ter = new Uint8Array(n)
@@ -48,6 +52,40 @@ export class GameMap {
     this.bld = new Int32Array(n)
     this.road = new Uint8Array(n)
     this.tileStatics = new Array(n)
+    this.depth = new Uint8Array(n)
+  }
+  /** can a boat be on this tile */
+  nav(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.N || y >= this.N) return false
+    return navTer(this.ter[y * this.N + x])
+  }
+  navI(i: number): boolean {
+    return navTer(this.ter[i])
+  }
+  /** distance of every water tile from the shore, for the colour of the sea */
+  measureDepth() {
+    const N = this.N
+    const q: number[] = []
+    this.depth.fill(255)
+    for (let i = 0; i < N * N; i++) {
+      if (this.ter[i] !== Ter.Water) {
+        this.depth[i] = 0
+        q.push(i)
+      }
+    }
+    for (let k = 0; k < q.length; k++) {
+      const i = q[k]
+      const x = i % N, y = (i / N) | 0
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue
+        const j = ny * N + nx
+        if (this.depth[j] === 255) {
+          this.depth[j] = Math.min(250, this.depth[i] + 1)
+          q.push(j)
+        }
+      }
+    }
   }
   inMap(x: number, y: number) {
     return x >= 0 && y >= 0 && x < this.N && y < this.N
@@ -68,7 +106,7 @@ export class GameMap {
     if (!this.inMap(x, y)) return false
     const i = this.idx(x, y)
     const t = this.ter[i]
-    return !this.block[i] && !this.bld[i] && (t === Ter.Grass || t === Ter.Field || t === Ter.Road || t === Ter.Dirt)
+    return !this.block[i] && !this.bld[i] && (t === Ter.Grass || t === Ter.Field || t === Ter.Road || t === Ter.Dirt || t === Ter.Sand)
   }
   addStatic(s: Static) {
     const tx = Math.floor(s.x), ty = Math.floor(s.y)
@@ -203,8 +241,32 @@ function oreField(m: GameMap, cx: number, cy: number, rad: number, r: Rand) {
     }
 }
 
-export function generateMap(seed: number, N = 96): GameMap {
+export type MapType = 'land' | 'coast' | 'lakes'
+
+/** water a boat can use */
+export function navTer(t: number) {
+  return t === Ter.Water || t === Ter.Bridge
+}
+
+function paintWater(m: GameMap, cx: number, cy: number, rad: number) {
+  for (let y = Math.floor(cy - rad - 1); y <= cy + rad + 1; y++)
+    for (let x = Math.floor(cx - rad - 1); x <= cx + rad + 1; x++)
+      if (m.inMap(x, y) && Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < rad) m.ter[m.idx(x, y)] = Ter.Water
+}
+
+/** a winding band of water between two points */
+function channel(m: GameMap, ax: number, ay: number, bx: number, by: number, w0: number, w1: number, seed: number) {
+  const L = Math.hypot(bx - ax, by - ay)
+  const nx = -(by - ay) / L, ny = (bx - ax) / L
+  for (let t = 0; t <= 1; t += 0.5 / L) {
+    const o = (fbm(t * L * 0.6, 3, 9, seed, 2) - 0.5) * 7 * Math.sin(t * Math.PI)
+    paintWater(m, ax + (bx - ax) * t + nx * o, ay + (by - ay) * t + ny * o, w0 + (w1 - w0) * t)
+  }
+}
+
+export function generateMap(seed: number, type: MapType = 'land', N = 96): GameMap {
   const m = new GameMap(N, seed)
+  m.type = type
   const r = mulberry32(seed)
   splitParcels(m, r)
 
@@ -213,64 +275,107 @@ export function generateMap(seed: number, N = 96): GameMap {
     for (let x = 0; x < N; x++) {
       const i = m.idx(x, y)
       const f = fbm(x, y, 16, seed + 5, 3)
-      if (f > 0.63) m.ter[i] = Ter.Forest
-      else if (m.ter[i] === Ter.Forest && f < 0.36) m.ter[i] = Ter.Grass
+      if (f > 0.64) m.ter[i] = Ter.Forest
+      else if (m.ter[i] === Ter.Forest && f < 0.38) m.ter[i] = Ter.Grass
     }
 
   // the river runs from the top corner to the bottom corner, between the two armies
   const wob = r() * 1000
-  for (let t = -0.02; t <= 1.02; t += 0.002) {
+  const riverAt = (t: number) => {
     const c = t * N
     const o = (fbm(t * 60 + wob, 0, 12, seed + 9, 3) - 0.5) * N * 0.55
-    const cx = c + o * 0.7071, cy = c - o * 0.7071
-    const w = 1.1 + fbm(t * 40, 5, 8, seed + 11, 2) * 1.1
-    for (let y = Math.floor(cy - 3); y <= cy + 3; y++)
-      for (let x = Math.floor(cx - 3); x <= cx + 3; x++) {
-        if (!m.inMap(x, y)) continue
-        if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < w) m.ter[m.idx(x, y)] = Ter.Water
-      }
+    return { x: c + o * 0.7071, y: c - o * 0.7071 }
   }
-  // a pond or two
-  for (let k = 0; k < 2; k++) {
-    if (r() < 0.4) continue
-    const side = k === 0 ? 1 : -1
-    const px = N * 0.5 + side * N * (0.12 + r() * 0.1) + (r() - 0.5) * N * 0.4
-    const py = N * 0.5 - side * N * (0.12 + r() * 0.1) + (r() - 0.5) * N * 0.4
-    const rad = 2 + r() * 2.5
-    for (let y = Math.floor(py - rad - 2); y <= py + rad + 2; y++)
-      for (let x = Math.floor(px - rad - 2); x <= px + rad + 2; x++)
-        if (m.inMap(x, y) && Math.hypot(x - px, y - py) + (fbm(x, y, 3, seed + 3, 2) - 0.5) * 2 < rad) m.ter[m.idx(x, y)] = Ter.Water
+  const seaLine = (d: number) => N * 0.55 + (fbm(d + 200, 7, 14, seed + 13, 3) - 0.5) * 12
+  if (type !== 'lakes') {
+    const wide = type === 'coast' ? 0.7 : 0
+    for (let t = -0.02; t <= 1.02; t += 0.002) {
+      const p = riverAt(t)
+      const w = 1.1 + wide + fbm(t * 40, 5, 8, seed + 11, 2) * 1.1
+      paintWater(m, p.x, p.y, w)
+    }
+  }
+  if (type === 'land') {
+    // a pond or two
+    for (let k = 0; k < 2; k++) {
+      if (r() < 0.4) continue
+      const side = k === 0 ? 1 : -1
+      const px = N * 0.5 + side * N * (0.12 + r() * 0.1) + (r() - 0.5) * N * 0.4
+      const py = N * 0.5 - side * N * (0.12 + r() * 0.1) + (r() - 0.5) * N * 0.4
+      const rad = 2 + r() * 2.5
+      for (let y = Math.floor(py - rad - 2); y <= py + rad + 2; y++)
+        for (let x = Math.floor(px - rad - 2); x <= px + rad + 2; x++)
+          if (m.inMap(x, y) && Math.hypot(x - px, y - py) + (fbm(x, y, 3, seed + 3, 2) - 0.5) * 2 < rad) m.ter[m.idx(x, y)] = Ter.Water
+    }
   }
 
-  // the two bases: the west (left) corner and the east (right) corner
-  m.starts = [
-    { x: 12, y: N - 13 },
-    { x: N - 13, y: 12 },
-  ]
+  // where the bases are: the west (left) and the east (right) corner
+  if (type === 'coast') {
+    m.starts = [
+      { x: 12, y: 60 },
+      { x: 60, y: 12 },
+    ]
+  } else {
+    m.starts = [
+      { x: 12, y: N - 13 },
+      { x: N - 13, y: 12 },
+    ]
+  }
+  if (type === 'coast') {
+    // the sea along the north, with a sandy beach
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const d = x + y - seaLine(x - y)
+        const i = m.idx(x, y)
+        if (d < 0) m.ter[i] = Ter.Water
+        else if (d < 1.7 && m.ter[i] !== Ter.Water) m.ter[i] = Ter.Sand
+      }
+  } else if (type === 'lakes') {
+    // a big lake in the middle with an arm reaching towards each base
+    const cx = N / 2 + (r() - 0.5) * 4, cy = N / 2 + (r() - 0.5) * 4
+    const R = N * 0.13
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const a = Math.atan2(y - cy, x - cx)
+        const rr = R * (0.8 + fbm(Math.cos(a) * 3 + 10, Math.sin(a) * 3 + 10, 2, seed + 17, 2) * 0.5)
+        if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < rr) m.ter[m.idx(x, y)] = Ter.Water
+      }
+    for (const s of m.starts) {
+      const dx = cx - s.x, dy = cy - s.y
+      const d = Math.hypot(dx, dy)
+      channel(m, s.x + (dx / d) * 9, s.y + (dy / d) * 9, cx, cy, 2.2, 2.6, seed + s.x)
+      paintWater(m, s.x + (dx / d) * 9.5, s.y + (dy / d) * 9.5, 2.8)
+    }
+    // two small lakes towards the other corners
+    for (const [px, py] of [[N * 0.2, N * 0.2], [N * 0.8, N * 0.8]]) {
+      const rad = 3 + r() * 2.5
+      for (let y = Math.floor(py - rad - 2); y <= py + rad + 2; y++)
+        for (let x = Math.floor(px - rad - 2); x <= px + rad + 2; x++)
+          if (m.inMap(x, y) && Math.hypot(x - px, y - py) + (fbm(x, y, 3, seed + 3, 2) - 0.5) * 2.5 < rad) m.ter[m.idx(x, y)] = Ter.Water
+    }
+  }
   for (const s of m.starts)
     for (let y = s.y - 11; y <= s.y + 11; y++)
       for (let x = s.x - 11; x <= s.x + 11; x++) {
         if (!m.inMap(x, y)) continue
         const d = Math.hypot(x - s.x, y - s.y)
         const i = m.idx(x, y)
-        if (d < 10 && (m.ter[i] === Ter.Forest || m.ter[i] === Ter.Water)) {
+        if (d < 7.5 && (m.ter[i] === Ter.Forest || m.ter[i] === Ter.Water)) {
           m.ter[i] = Ter.Grass
           m.variant[i] = 0
-        }
+        } else if (d < 10 && m.ter[i] === Ter.Forest) m.ter[i] = Ter.Grass
       }
 
   for (let i = 0; i < N * N; i++) m.block[i] = m.ter[i] === Ter.Water || m.ter[i] === Ter.Forest ? 1 : 0
 
-  // roads: two routes between the bases over different bridges, and one along each side
+  // roads: two routes between the bases over different bridges
   const [A, B] = m.starts
-  const riverAt = (t: number) => {
-    const c = t * N
-    const o = (fbm(t * 60 + wob, 0, 12, seed + 9, 3) - 0.5) * N * 0.55
-    return { x: Math.round(c + o * 0.7071), y: Math.round(c - o * 0.7071) }
-  }
-  const crossings = [riverAt(0.3 + r() * 0.08), riverAt(0.62 + r() * 0.08)]
-  for (const c of crossings) {
-    const cx = Math.max(2, Math.min(N - 3, c.x)), cy = Math.max(2, Math.min(N - 3, c.y))
+  const ways =
+    type === 'coast' ? [riverAt(0.47 + r() * 0.06), riverAt(0.74 + r() * 0.08)]
+    : type === 'lakes' ? [{ x: N * 0.24, y: N * 0.24 }, { x: N * 0.76, y: N * 0.76 }]
+    : [riverAt(0.3 + r() * 0.08), riverAt(0.62 + r() * 0.08)]
+  for (const c of ways) {
+    const cx = Math.max(2, Math.min(N - 3, Math.round(c.x))), cy = Math.max(2, Math.min(N - 3, Math.round(c.y)))
     layRoad(m, roadPath(m, A.x + 2, A.y - 2, cx, cy))
     layRoad(m, roadPath(m, cx, cy, B.x - 2, B.y + 2))
   }
@@ -324,19 +429,39 @@ export function generateMap(seed: number, N = 96): GameMap {
       }
   }
 
-  // ore: two fields by each base and three to fight over
-  const dirA = { x: 1, y: -1 }
+  // ore: two fields by each base and three to fight over, always on dry land
+  const dry = (x: number, y: number) => {
+    for (let r2 = 0; r2 < 30; r2++)
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2
+        const px = Math.round(x + Math.cos(a) * r2), py = Math.round(y + Math.sin(a) * r2)
+        if (px < 4 || py < 4 || px > N - 5 || py > N - 5) continue
+        let ok = true
+        for (let dy = -3; dy <= 3 && ok; dy++)
+          for (let dx = -3; dx <= 3 && ok; dx++) {
+            const t = m.ter[m.idx(px + dx, py + dy)]
+            if (t === Ter.Water || t === Ter.Bridge) ok = false
+          }
+        if (ok && m.starts.every((s) => Math.hypot(s.x - px, s.y - py) > 6)) return { x: px, y: py }
+        if (r2 === 0) break
+      }
+    return { x, y }
+  }
   for (let k = 0; k < 2; k++) {
     const s = m.starts[k]
     const sgn = k === 0 ? 1 : -1
-    oreField(m, s.x + sgn * 8 + (r() - 0.5) * 2, s.y + sgn * 1 + (r() - 0.5) * 2, 2.6, r)
-    oreField(m, s.x + sgn * -1 + (r() - 0.5) * 2, s.y - sgn * 8 + (r() - 0.5) * 2, 2.6, r)
+    const f1 = dry(s.x + sgn * 8 + (r() - 0.5) * 2, s.y + sgn * 1 + (r() - 0.5) * 2)
+    const f2 = dry(s.x + sgn * -1 + (r() - 0.5) * 2, s.y - sgn * 8 + (r() - 0.5) * 2)
+    oreField(m, f1.x, f1.y, 2.6, r)
+    oreField(m, f2.x, f2.y, 2.6, r)
   }
-  void dirA
-  oreField(m, N * 0.5 + (r() - 0.5) * 6, N * 0.5 + (r() - 0.5) * 6, 3.4, r)
-  oreField(m, N * 0.2 + r() * 6, N * 0.2 + r() * 6, 3.2, r)
-  oreField(m, N * 0.8 - r() * 6, N * 0.8 - r() * 6, 3.2, r)
-  // make sure the middle field is not drowned
+  const mids = type === 'coast'
+    ? [[N * 0.62, N * 0.62], [N * 0.4, N * 0.75], [N * 0.75, N * 0.4]]
+    : [[N * 0.5, N * 0.5], [N * 0.2, N * 0.2], [N * 0.8, N * 0.8]]
+  for (const [x, y] of mids) {
+    const p = dry(x + (r() - 0.5) * 6, y + (r() - 0.5) * 6)
+    oreField(m, p.x, p.y, 3.2, r)
+  }
   for (let i = 0; i < N * N; i++) if (m.ter[i] === Ter.Ore) m.block[i] = 0
 
   // trees in the woods, and a few on their own in the fields
@@ -359,5 +484,6 @@ export function generateMap(seed: number, N = 96): GameMap {
         }
       }
     }
+  m.measureDepth()
   return m
 }

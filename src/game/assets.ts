@@ -3,7 +3,7 @@
 import { Rot, renderSprite, renderShadow, makeCanvas, toSprite, type Sprite, type Vox } from '../core/voxel'
 import { toABGR, mix, shade, KZ } from '../core/iso'
 import { hash2 } from '../core/rng'
-import { unitModel, buildingModel, treeModel, houseModel, oreModel } from './models'
+import { unitModel, buildingModel, treeModel, houseModel, oreModel, titleModel } from './models'
 import type { Faction } from './colors'
 import { UNIT_ORDER, BUILD_ORDER } from './defs'
 import type { StaticKind } from './map'
@@ -42,9 +42,28 @@ export class Assets {
   ore: Sprite[][] = []
   explosions: Sprite[][] = []
   smoke: Sprite[] = []
+  dust: Sprite[] = []
   fire: Sprite[] = []
   rubble: Sprite[] = []
   scorch: Sprite[] = []
+  /** soft round glows for lights and the bloom of fire, by radius */
+  glow = new Map<string, HTMLCanvasElement>()
+  title: Sprite | null = null
+  /** a soft round light of a colour; cached */
+  glowOf(r: number, color: string): HTMLCanvasElement {
+    const key = r + color
+    let c = this.glow.get(key)
+    if (c) return c
+    c = makeCanvas(r * 2, r * 2)
+    const x = c.getContext('2d')!
+    const g = x.createRadialGradient(r, r, 0, r, r, r)
+    g.addColorStop(0, color)
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    x.fillStyle = g
+    x.fillRect(0, 0, r * 2, r * 2)
+    this.glow.set(key, c)
+    return c
+  }
 }
 
 const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
@@ -79,7 +98,7 @@ export function mountOffset(mount: [number, number, number], yaw: number): [numb
   return [rx - ry, (rx + ry) * 0.5 - c * KZ]
 }
 
-function fx(): Pick<Assets, 'explosions' | 'smoke' | 'fire' | 'scorch' | 'rubble'> {
+function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'fire' | 'scorch' | 'rubble'> {
   const FIRE = [0xfffbe0, 0xffe07a, 0xffb13a, 0xf07a26, 0xc4461c, 0x7a2c18].map((c) => c)
   const explosions: Sprite[][] = []
   for (const R of [5, 9, 15]) {
@@ -111,7 +130,9 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'fire' | 'scorch' | 'rubble
   }
   // dithered smoke puffs, light on top
   const smoke: Sprite[] = []
+  const dust: Sprite[] = []
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+  for (const [list, cols] of [[smoke, [0xc8c6c0, 0x8a8782, 0xa9a6a0]], [dust, [0xc8b48c, 0x8a7656, 0xa89470]]] as [Sprite[], number[]][])
   for (let r = 1; r <= 9; r++) {
     const S = r * 2 + 3
     const px = new Uint32Array(S * S)
@@ -121,11 +142,11 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'fire' | 'scorch' | 'rubble
         const d = Math.hypot(dx, dy) / (r + 0.3)
         if (d > 1) continue
         const lit = dy < -r * 0.3 || dx < -r * 0.4
-        const c = lit ? 0xc8c6c0 : d > 0.75 ? 0x8a8782 : 0xa9a6a0
+        const c = lit ? cols[0] : d > 0.75 ? cols[1] : cols[2]
         if (d > 0.8 && BAYER[(y & 3) * 4 + (x & 3)] < 8) continue
         px[y * S + x] = toABGR(c)
       }
-    smoke.push(toSprite(px, S, S, S >> 1, S >> 1))
+    list.push(toSprite(px, S, S, S >> 1, S >> 1))
   }
   // small flames for burning wrecks and buildings
   const fire: Sprite[] = []
@@ -172,7 +193,7 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'fire' | 'scorch' | 'rubble
       }
     rubble.push(toSprite(px, W, H, W >> 1, H >> 1))
   }
-  return { explosions, smoke, fire, scorch, rubble }
+  return { explosions, smoke, dust, fire, scorch, rubble }
 }
 
 export async function buildAssets(onProgress: (t: number, what: string) => void): Promise<Assets> {
@@ -185,7 +206,7 @@ export async function buildAssets(onProgress: (t: number, what: string) => void)
     for (const key of UNIT_ORDER) {
       jobs.push([`Einheiten: ${key}`, () => {
         const um = unitModel(key, f)
-        const inf = key === 'rifle' || key === 'at'
+        const inf = key === 'rifle' || key === 'at' || key === 'sniper'
         const dirs = inf ? 16 : 32
         const hull = new Rot(um.hull, dirs)
         const art: UnitArt = {
@@ -201,10 +222,10 @@ export async function buildAssets(onProgress: (t: number, what: string) => void)
         } else {
           if (um.turret) art.turret = new Rot(um.turret, 32, {}, false)
           if (um.alt) art.alt = new Rot(um.alt, dirs, {}, false)
-          if (key !== 'heli') {
+          if (key !== 'jet') {
             art.wreck = new Rot(um.hull, 16, { dark: 0.42 }, false)
             if (um.turret) art.wreckTurret = new Rot(um.turret, 16, { dark: 0.42 }, false)
-          } else art.wreck = new Rot(um.hull, 16, { dark: 0.42 }, false)
+          }
         }
         const yaw = 2.2
         const sp = renderSprite(um.hull, yaw)
@@ -240,6 +261,7 @@ export async function buildAssets(onProgress: (t: number, what: string) => void)
       barn: [0, 1].map((i) => mk(houseModel('barn', i))),
     }
     A.ore = [0, 1, 2].map((st) => [0, 1, 2].map((v) => renderSprite(oreModel(st, v + 1), 0)))
+    A.title = renderSprite(titleModel('PIXELFRONT'), -Math.PI / 4)
   }])
   for (let i = 0; i < jobs.length; i++) {
     onProgress(i / jobs.length, jobs[i][0])

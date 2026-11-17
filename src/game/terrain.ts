@@ -28,6 +28,9 @@ const ROAD_EDGE = hex('8d8778')
 const DECK = hex('8a8274')
 const DECK_DARK = hex('6a6358')
 const OUTSIDE = hex('141a12')
+const SAND = hex('d0bf8b')
+const WET_SAND = hex('ad9c6c')
+const WATER_DEEPEST = hex('2a5270')
 
 export class Terrain {
   cv: HTMLCanvasElement
@@ -58,6 +61,12 @@ export class Terrain {
       return t === Ter.Water || t === Ter.Bridge
     }
     const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]
+    // water beside a beach has a sandy edge
+    const sandy = new Uint8Array(N * N)
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++)
+        for (const [dx, dy] of D8)
+          if (m.inMap(x + dx, y + dy) && m.ter[m.idx(x + dx, y + dy)] === Ter.Sand) sandy[m.idx(x, y)] = 1
     for (let y = 0; y < N; y++)
       for (let x = 0; x < N; x++) {
         const w = isWater(x, y)
@@ -111,8 +120,11 @@ export class Terrain {
         let c: number
         if (t === Ter.Water || t === Ter.Bridge) {
           const d = edgeDist(nb[i], u, v)
-          if (d < 0.1) c = BANK
+          const dep = m.depth[i]
+          if (d < 0.1) c = sandy[i] ? WET_SAND : BANK
           else if (d < 0.32) c = WATER_SHALLOW
+          else if (dep >= 6) c = valueNoise(wx, wy, 4, seed + 4) > 0.5 ? WATER_DEEPEST : shade(WATER_DEEPEST, 1.06)
+          else if (dep >= 3) c = valueNoise(wx, wy, 3, seed + 4) > 0.45 ? WATER_DEEP : WATER
           else c = valueNoise(wx, wy, 3, seed + 4) > 0.55 ? WATER_DEEP : WATER
           // ripples
           if (d >= 0.1 && ((vx + vy * 3) % 11 === 0) && h < 0.4) c = shade(c, 1.18)
@@ -132,6 +144,10 @@ export class Terrain {
               if ((m.variant[i] & 7) === 1 && h < 0.08) c = hex('8aa040')
               break
             }
+            case Ter.Sand:
+              c = h < 0.15 ? shade(SAND, 0.92) : h > 0.93 ? shade(SAND, 1.07) : SAND
+              if (h > 0.995) c = hex('f2ecd8') // shells
+              break
             case Ter.Forest:
               c = h < 0.3 ? shade(FOREST, 0.86) : FOREST
               break
@@ -157,8 +173,9 @@ export class Terrain {
           // banks along the water
           if (nb[i]) {
             const d = edgeDist(nb[i], u, v)
-            if (d < 0.08) c = BANK
-            else if (d < 0.14) c = mix(c, BANK, 0.5)
+            const bank = t === Ter.Sand ? WET_SAND : BANK
+            if (d < 0.08) c = bank
+            else if (d < 0.14) c = mix(c, bank, 0.5)
           }
           if (t === Ter.Road) {
             const rb = roadBand(m.road[i], u, v)

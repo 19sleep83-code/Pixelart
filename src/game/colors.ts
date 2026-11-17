@@ -17,6 +17,11 @@ export interface Scheme {
   uniform: number
   uniform2: number
   helmet: number
+  navy: number
+  navy2: number
+  deck: number
+  jet: number
+  jet2: number
   name: string
   short: string
 }
@@ -36,6 +41,11 @@ export const SCHEMES: Record<Faction, Scheme> = {
     uniform: hex('56603c'),
     uniform2: hex('3e452c'),
     helmet: hex('454d32'),
+    navy: hex('8e959b'),
+    navy2: hex('6c747a'),
+    deck: hex('545a58'),
+    jet: hex('9aa3a9'),
+    jet2: hex('7c868d'),
     name: 'NATO',
     short: 'NATO',
   },
@@ -53,6 +63,11 @@ export const SCHEMES: Record<Faction, Scheme> = {
     uniform: hex('6b7046'),
     uniform2: hex('4b5133'),
     helmet: hex('55603a'),
+    navy: hex('76818a'),
+    navy2: hex('58646d'),
+    deck: hex('4c534f'),
+    jet: hex('8794a0'),
+    jet2: hex('5f7383'),
     name: 'Russland',
     short: 'RUS',
   },

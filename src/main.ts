@@ -1,13 +1,15 @@
-// Start-up: the main menu, loading, and the frame loop that runs a battle.
+// Start-up: the title with a live battle behind it, the menu, loading, and the frame loop.
 import './style.css'
 import { buildAssets, type Assets } from './game/assets'
-import { Game, type GameOpts } from './game/game'
+import { Game, type GameOpts, type TimeOfDay, type Weather } from './game/game'
 import { Terrain } from './game/terrain'
 import { Renderer } from './game/render'
+import { Atmos } from './game/atmos'
 import { Input } from './game/input'
 import { AI } from './game/ai'
 import { Hud } from './ui/hud'
 import type { Faction } from './game/colors'
+import type { MapType } from './game/map'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const STEP = 1 / 30
@@ -29,10 +31,28 @@ const store = {
   },
 }
 
+const TIPS = [
+  'Ohne Strom läuft die Produktion nur halb so schnell. Behalte den Strombalken im Blick.',
+  'Ein Rohstoffdepot bringt einen Erzlaster mit. Zwei Laster pro Depot lohnen sich.',
+  'Scharfschützen sind unsichtbar, solange sie stillhalten und nicht schießen.',
+  'Landungsschiff: Einheiten wählen, Rechtsklick aufs Schiff. Dann das Schiff mit Rechtsklick auf Land schicken.',
+  'Kampfjets fliegen einen Luftschlag und kehren zum Aufmunitionieren aufs Flugfeld zurück.',
+  'Ein Flugzeugträger schickt seine Jets selbstständig gegen alles in weitem Umkreis.',
+  'Einheiten mit drei Abschüssen werden befördert und richten mehr Schaden an. Veteranen heilen sich selbst.',
+  'Die Werft muss am Ufer stehen und darf weiter von der Basis entfernt sein als andere Gebäude.',
+  'Zerstörer und Raketenkreuzer beschießen Ziele an Land aus großer Entfernung.',
+  'Artillerie trifft nicht auf kurze Entfernung. Schütze sie mit Panzern.',
+  'Mit F1–F5 wechselst du die Baureiter, mit Y X C V B … baust du direkt.',
+  'Doppelklick auf eine Einheit wählt alle gleichen Einheiten im Bild.',
+]
+
 let assets: Promise<Assets> | null = null
 const opts: GameOpts = {
   faction: (store.get('faction') as Faction) || 'nato',
-  difficulty: (Number(store.get('diff') ?? 1) as 0 | 1 | 2),
+  difficulty: Number(store.get('diff') ?? 1) as 0 | 1 | 2,
+  mapType: (store.get('map') as MapType) || 'coast',
+  tod: (store.get('tod') as TimeOfDay) || 'day',
+  weather: (store.get('weather') as Weather) || 'clouds',
   seed: Math.floor(Math.random() * 99999) + 1,
 }
 
@@ -54,9 +74,132 @@ function show(panel: 'menu' | 'loading' | 'pause' | 'end' | null, overGame = fal
   $('screen').classList.toggle('over', overGame)
 }
 
-function menu() {
+function tipLoop(): () => void {
+  let i = Math.floor(Math.random() * TIPS.length)
+  const el = $('load-tip')
+  el.textContent = TIPS[i]
+  const t = setInterval(() => (el.textContent = TIPS[(i = (i + 1) % TIPS.length)]), 3500)
+  return () => clearInterval(t)
+}
+
+async function getAssets(): Promise<Assets> {
+  if (!assets) {
+    const fill = $('load-fill'), what = $('load-what')
+    assets = buildAssets((t, w) => {
+      fill.style.width = `${Math.round(t * 100)}%`
+      what.textContent = w
+    })
+  }
+  return assets
+}
+
+// ─────────────────────────────────────────────────────── the battle behind the menu
+
+interface Demo {
+  game: Game
+  r: Renderer
+  ais: AI[]
+  raf: number
+  focus: { x: number; y: number }
+  next: number
+}
+let demo: Demo | null = null
+
+function startDemo(A: Assets) {
+  stopDemo()
+  const cv = $<HTMLCanvasElement>('backdrop')
+  const game = new Game({ seed: 1000 + Math.floor(Math.random() * 9000), faction: 'nato', difficulty: 2, mapType: 'coast', tod: opts.tod, weather: opts.weather })
+  game.reveal = true
+  const terrain = new Terrain(game.map)
+  terrain.paint()
+  terrain.bakeStatics(A)
+  const r = new Renderer(game, A, terrain, cv)
+  r.grain = 0.06
+  const ais = [new AI(game), new AI(game)]
+  ais[0].p = 0
+  // get the war going before anyone looks
+  for (let i = 0; i < 30 * 330; i++) {
+    game.update(STEP)
+    for (const a of ais) a.update(STEP)
+  }
+  const d: Demo = { game, r, ais, raf: 0, focus: { x: game.map.N / 2, y: game.map.N / 2 }, next: 0 }
+  demo = d
+  const size = () => {
+    const s = window.innerWidth > 1400 ? 3 : 2
+    r.resize(Math.ceil(window.innerWidth / s), Math.ceil(window.innerHeight / s))
+    cv.style.width = `${r.W * s}px`
+    cv.style.height = `${r.H * s}px`
+  }
+  size()
+  window.addEventListener('resize', size)
+  let last = performance.now()
+  let cx = d.focus.x, cy = d.focus.y
+  const frame = (now: number) => {
+    if (demo !== d) {
+      window.removeEventListener('resize', size)
+      return
+    }
+    const dt = Math.min(0.1, (now - last) / 1000)
+    last = now
+    game.update(dt)
+    for (const a of ais) a.update(dt)
+    // the camera drifts to wherever the fighting is
+    if (game.time > d.next) {
+      d.next = game.time + 9
+      let best = d.focus, bs = -1
+      for (const e of game.ents) {
+        if (e.isB || e.dead) continue
+        const n = game.ents.filter((o) => !o.isB && o.owner !== e.owner && Math.abs(o.x - e.x) + Math.abs(o.y - e.y) < 9).length + (e.naval ? 2 : 0)
+        if (n > bs) {
+          bs = n
+          best = { x: e.x, y: e.y }
+        }
+      }
+      d.focus = best
+    }
+    cx += (d.focus.x - cx) * Math.min(1, dt * 0.4)
+    cy += (d.focus.y - cy) * Math.min(1, dt * 0.4)
+    r.lookAt(cx, cy)
+    r.draw({}, dt)
+    if (game.over) {
+      startDemo(A)
+      return
+    }
+    d.raf = requestAnimationFrame(frame)
+  }
+  d.raf = requestAnimationFrame(frame)
+  cv.classList.remove('hidden')
+}
+
+function stopDemo() {
+  if (!demo) return
+  cancelAnimationFrame(demo.raf)
+  demo = null
+}
+
+function drawLogo(A: Assets) {
+  const logo = $<HTMLCanvasElement>('logo')
+  const t = A.title!
+  const s = window.innerWidth > 1300 && window.innerHeight > 1000 ? 3 : 2
+  logo.width = t.w
+  logo.height = t.h
+  logo.style.width = `${t.w * s}px`
+  logo.style.height = `${t.h * s}px`
+  logo.getContext('2d')!.drawImage(t.cv, 0, 0)
+}
+
+async function menu() {
   stopGame()
   $('app').classList.add('hidden')
+  if (!assets) {
+    show('loading')
+    const stop = tipLoop()
+    const A = await getAssets()
+    stop()
+    drawLogo(A)
+    startDemo(A)
+  } else if (!demo) startDemo(await assets)
+  $('backdrop').classList.remove('hidden')
   show('menu')
   seg('opt-faction', opts.faction, (v) => {
     opts.faction = v as Faction
@@ -65,6 +208,23 @@ function menu() {
   seg('opt-diff', String(opts.difficulty), (v) => {
     opts.difficulty = +v as 0 | 1 | 2
     store.set('diff', v)
+  })
+  seg('opt-map', opts.mapType, (v) => {
+    opts.mapType = v as MapType
+    store.set('map', v)
+  })
+  const restyle = () => {
+    if (demo) demo.r.atmos = new Atmos(demo.game.map, opts.tod, opts.weather)
+  }
+  seg('opt-tod', opts.tod, (v) => {
+    opts.tod = v as TimeOfDay
+    store.set('tod', v)
+    restyle()
+  })
+  seg('opt-weather', opts.weather, (v) => {
+    opts.weather = v as Weather
+    store.set('weather', v)
+    restyle()
   })
   const seed = $<HTMLInputElement>('opt-seed')
   seed.value = String(opts.seed)
@@ -101,25 +261,24 @@ function stopGame() {
 async function start() {
   stopGame()
   show('loading')
-  const fill = $('load-fill'), what = $('load-what')
-  const progress = (t: number, w: string) => {
-    fill.style.width = `${Math.round(t * 85)}%`
-    what.textContent = w
-  }
-  assets ??= buildAssets(progress)
-  const A = await assets
-  progress(0.9, 'Landschaft wird gemalt …')
-  await new Promise((r) => setTimeout(r, 30))
+  const stopTips = tipLoop()
+  const A = await getAssets()
+  $('load-what').textContent = 'Das Gelände wird erkundet …'
+  $('load-fill').style.width = '100%'
+  await new Promise((r) => setTimeout(r, 60))
   const game = new Game({ ...opts })
   const terrain = new Terrain(game.map)
   terrain.paint()
   terrain.bakeStatics(A)
-  progress(1, 'Bereit')
+  stopDemo()
+  stopTips()
+  $('backdrop').classList.add('hidden')
 
   $('app').classList.remove('hidden')
   const view = $<HTMLCanvasElement>('view')
   const wrap = $('view-wrap')
   const r = new Renderer(game, A, terrain, view)
+  r.grain = store.get('grain') === '0' ? 0 : 0.05
   const abort = new AbortController()
   let zoom = Number(store.get('zoom') ?? 0)
   const scale = () => {
@@ -171,6 +330,12 @@ async function start() {
   input.onPause = () => pause(!s.paused)
   $('menu-btn').onclick = () => pause(true)
   $('resume').onclick = () => pause(false)
+  const grain = $<HTMLInputElement>('opt-grain')
+  grain.checked = r.grain > 0
+  grain.onchange = () => {
+    r.grain = grain.checked ? 0.05 : 0
+    store.set('grain', grain.checked ? '1' : '0')
+  }
   $('restart').onclick = () => {
     opts.seed = Math.floor(Math.random() * 99999) + 1
     start()
@@ -183,7 +348,8 @@ async function start() {
   $('end-menu').onclick = () => menu()
   show(null)
 
-  game.msg('Baue ein Kraftwerk und ein Rohstoffdepot.', 'info')
+  game.msg('Gefechtsstand bereit. Baue ein Kraftwerk und ein Rohstoffdepot.', 'info')
+  if (game.map.type !== 'land') game.msg('Gewässer in Reichweite: Eine Werft am Ufer baut Schiffe.', 'info')
   let last = performance.now()
   let acc = 0
   let frames = 0
@@ -204,7 +370,7 @@ async function start() {
       input.scroll(dt)
     }
     input.frame()
-    r.draw(input.overlay)
+    r.draw(input.overlay, s.paused ? 0 : dt)
     hud.update()
     if (frames++ % 4 === 0) hud.drawMini()
     if (game.over && !s.ended) {
@@ -218,7 +384,7 @@ async function start() {
 
 function endScreen(game: Game) {
   const win = game.over === 1
-  $('end-title').textContent = win ? 'Sieg!' : 'Niederlage'
+  $('end-title').textContent = win ? 'Sieg' : 'Niederlage'
   const [me, foe] = game.players
   const t = Math.floor(game.time)
   $('end-stats').innerHTML =

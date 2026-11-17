@@ -4,7 +4,8 @@
 import type { Game, Ent } from './game'
 import { Ter } from './map'
 
-const PLAN = ['power', 'ref', 'barracks', 'power', 'factory', 'bunker', 'ref', 'radar', 'power', 'rocket', 'helipad', 'power', 'bunker', 'rocket', 'factory', 'power', 'rocket', 'bunker']
+const LAND_PLAN = ['power', 'ref', 'barracks', 'power', 'factory', 'bunker', 'ref', 'radar', 'power', 'rocket', 'helipad', 'power', 'airfield', 'bunker', 'rocket', 'factory', 'power', 'rocket', 'bunker']
+const SEA_PLAN = ['power', 'ref', 'barracks', 'power', 'factory', 'bunker', 'ref', 'radar', 'power', 'shipyard', 'rocket', 'helipad', 'power', 'airfield', 'bunker', 'power', 'rocket', 'factory', 'rocket', 'bunker']
 
 export class AI {
   p = 1
@@ -15,12 +16,19 @@ export class AI {
   private attackers = new Set<number>()
   private extraT = 0
   private r: () => number
+  private plan: string[]
+  private noShipyard = false
+  private fleet = new Set<number>()
+  private nextFleet: number
+  private strikeT = 0
 
   constructor(public g: Game) {
     const d = g.opts.difficulty
     this.waveSize = [5, 7, 8][d]
     this.nextAttack = [420, 300, 210][d]
     this.r = g.rand
+    this.plan = g.map.type === 'land' ? LAND_PLAN : SEA_PLAN
+    this.nextFleet = this.nextAttack + 60
   }
 
   update(dt: number) {
@@ -45,7 +53,10 @@ export class AI {
     if (q[0]?.ready) {
       const spot = this.findSpot(q[0].key)
       if (spot) g.placeReady(this.p, spot.x, spot.y)
-      else g.cancelItem(this.p, 'build', q[0].key)
+      else {
+        if (q[0].key === 'shipyard') this.noShipyard = true
+        g.cancelItem(this.p, 'build', q[0].key)
+      }
       return
     }
     if (q.length || !this.mine('hq').length) return
@@ -57,13 +68,17 @@ export class AI {
       if (e.b!.power > 0) prod += e.b!.power
       else use -= e.b!.power
     }
-    const next = this.planIdx < PLAN.length ? g.bdefs[PLAN[this.planIdx]].power : -20
+    const next = this.planIdx < this.plan.length ? g.bdefs[this.plan[this.planIdx]].power : -20
     if (use - Math.min(0, next) + 10 > prod) {
       g.queueItem(this.p, 'build', 'power')
       return
     }
-    if (this.planIdx < PLAN.length) {
-      const key = PLAN[this.planIdx]
+    if (this.planIdx < this.plan.length) {
+      const key = this.plan[this.planIdx]
+      if (key === 'shipyard' && this.noShipyard) {
+        this.planIdx++
+        return
+      }
       if (g.missing(this.p, g.bdefs[key].req).length) return
       if (g.queueItem(this.p, 'build', key)) this.planIdx++
       return
@@ -93,10 +108,13 @@ export class AI {
       g.queueItem(this.p, 'veh', 'harv')
     }
     const wealthy = pl.credits > 600
-    if (g.hasBuilding(this.p, 'barracks') && pl.queues.inf.length < 2 && (wealthy || pl.queues.inf.length === 0)) {
+    // short of money: no more than two things at once, so something actually gets finished
+    const busy = (['inf', 'veh', 'air', 'sea'] as const).filter((q) => pl.queues[q].length > 0).length
+    const room = (q: 'inf' | 'veh' | 'air' | 'sea') => pl.queues[q].length > 0 || wealthy || busy < 2
+    if (g.hasBuilding(this.p, 'barracks') && pl.queues.inf.length < (wealthy ? 2 : 1) && room('inf') && (busy === 0 || this.r() < 0.5)) {
       g.queueItem(this.p, 'inf', this.r() < 0.55 ? 'rifle' : 'at')
     }
-    if (g.hasBuilding(this.p, 'factory') && pl.queues.veh.length < 2 && pl.credits > 400) {
+    if (g.hasBuilding(this.p, 'factory') && pl.queues.veh.length < (wealthy ? 2 : 1) && room('veh')) {
       const radar = g.hasBuilding(this.p, 'radar')
       const enemyAir = g.ents.some((e) => e.owner !== this.p && e.air && !e.dead)
       const roll = this.r()
@@ -105,14 +123,27 @@ export class AI {
       if (enemyAir && radar && this.mine('aa').length < 3) key = 'aa'
       g.queueItem(this.p, 'veh', key)
     }
-    if (g.hasBuilding(this.p, 'helipad') && pl.queues.air.length < 1 && pl.credits > 1500 && this.mine('heli').length < 4) {
-      g.queueItem(this.p, 'air', 'heli')
+    if (pl.queues.air.length < 1 && room('air')) {
+      const slots = this.mine('airfield').filter((b) => b.built >= 1).length * 3
+      const jets = this.mine('jet').filter((j) => j.home && g.byId.get(j.home)?.isB).length
+      if (slots > jets && (this.r() < 0.5 || !g.hasBuilding(this.p, 'helipad'))) g.queueItem(this.p, 'air', 'jet')
+      else if (g.hasBuilding(this.p, 'helipad') && this.mine('heli').length < 4) g.queueItem(this.p, 'air', 'heli')
+    }
+    // the navy
+    if (g.hasBuilding(this.p, 'shipyard') && pl.queues.sea.length < 1 && room('sea')) {
+      const roll = this.r()
+      let key = roll < 0.3 ? 'boat' : roll < 0.65 ? 'corvette' : 'destroyer'
+      if (key === 'destroyer' && !g.hasBuilding(this.p, 'radar')) key = 'corvette'
+      if (g.hasBuilding(this.p, 'airfield') && !this.mine('carrier').length && roll > 0.85) key = 'carrier'
+      g.queueItem(this.p, 'sea', key)
     }
   }
 
   private army() {
     const g = this.g
-    const units = this.mine().filter((e) => !e.isB && e.weapon)
+    this.navy()
+    this.jets()
+    const units = this.mine().filter((e) => !e.isB && e.weapon && !e.naval && !e.jet)
     // defend: whatever hit us recently gets a visit
     const hurt = this.mine().find((e) => e.isB && g.time - e.lastHit < 6 && e.lastAttacker && !e.lastAttacker.dead)
     if (hurt) {
@@ -154,6 +185,67 @@ export class AI {
     }
   }
 
+  /** ships sail in groups for the enemy buildings nearest the water */
+  private navy() {
+    const g = this.g
+    for (const id of this.fleet) if (!g.byId.has(id)) this.fleet.delete(id)
+    const ships = this.mine().filter((e) => e.naval && e.weapon)
+    const idle = ships.filter((u) => !this.fleet.has(u.id) && (u.order === 'idle' || (u.order === 'amove' && !u.dest && !u.path.length)))
+    const carrierIdle = this.mine('carrier').filter((c) => c.order === 'idle' && !c.dest)
+    if (g.time > this.nextFleet && idle.length >= 3) {
+      const t = this.shoreTarget()
+      if (t) {
+        g.commandMove([...idle, ...carrierIdle], t.x, t.y, true)
+        for (const u of idle) this.fleet.add(u.id)
+        this.nextFleet = g.time + 90
+      }
+    }
+    for (const id of this.fleet) {
+      const u = g.byId.get(id)
+      if (!u) continue
+      if (u.order === 'idle' || (u.order === 'amove' && !u.target && !u.path.length && !u.dest)) {
+        const t = this.shoreTarget(u)
+        if (t) g.commandMove([u], t.x, t.y, true)
+      }
+    }
+  }
+
+  /** the water next to the enemy building closest to it */
+  private shoreTarget(from?: Ent): { x: number; y: number } | null {
+    const g = this.g
+    let best: { x: number; y: number } | null = null
+    let bd = 1e9
+    for (const e of g.ents) {
+      if (e.dead || e.owner === this.p || !e.isB) continue
+      const w = g.npf.nearestWalkable(e.x, e.y, 9)
+      if (!w) continue
+      const d = Math.hypot(w.x - e.x, w.y - e.y) * 4 + (from ? Math.hypot(e.x - from.x, e.y - from.y) * 0.3 : 0)
+      if (d < bd) {
+        bd = d
+        best = { x: w.x + 0.5, y: w.y + 0.5 }
+      }
+    }
+    return best
+  }
+
+  /** jets on the ground with weapons aboard fly at whatever matters most */
+  private jets() {
+    const g = this.g
+    if (g.time < this.strikeT) return
+    const ready = this.mine('jet').filter((j) => j.js === 'park' && j.ammo >= 1)
+    if (!ready.length) return
+    this.strikeT = g.time + 12
+    // first whatever is hitting the base, else a building
+    const hurt = this.mine().find((e) => e.isB && g.time - e.lastHit < 8 && e.lastAttacker && !e.lastAttacker.dead)
+    let t: Ent | null = hurt?.lastAttacker ?? null
+    if (!t) {
+      const blds = g.ents.filter((e) => !e.dead && e.owner !== this.p && e.isB)
+      blds.sort((a, b) => (b.b!.weapon ? 1 : 0) - (a.b!.weapon ? 1 : 0) || (a.key === 'power' ? -1 : 0))
+      t = blds[Math.floor(this.r() * Math.min(4, blds.length))] ?? null
+    }
+    if (t) g.commandStrike(ready, t, t.x, t.y)
+  }
+
   private targetBuilding(from?: Ent): Ent | null {
     const g = this.g
     const hq = from ?? this.mine('hq')[0] ?? this.mine()[0]
@@ -189,11 +281,12 @@ export class AI {
     const def = g.bdefs[key]
     const hq = this.mine('hq')[0] ?? this.mine().find((e) => e.isB)
     if (!hq) return null
+    const far = def.shore ? 22 : 16
     const enemy = g.ents.find((e) => e.owner !== this.p && e.key === 'hq')
     const ex = enemy?.x ?? m.N / 2, ey = enemy?.y ?? m.N / 2
     let best: { x: number; y: number } | null = null
     let bs = 1e9
-    for (let r = 2; r <= 16; r++) {
+    for (let r = 2; r <= far; r++) {
       for (let dy = -r; dy <= r; dy++)
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
@@ -210,7 +303,7 @@ export class AI {
             best = { x: tx, y: ty }
           }
         }
-      if (best && r > 6) break
+      if (best && r > 6 && !def.shore) break
     }
     return best
   }

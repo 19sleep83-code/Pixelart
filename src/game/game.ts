@@ -1,16 +1,18 @@
 // The state of a battle and everything that changes it: units driving and fighting, shells in
 // the air, buildings going up, ore being hauled, money and power, and the fog over the map.
 
-import { GameMap, Ter, generateMap } from './map'
+import { GameMap, Ter, generateMap, type MapType } from './map'
 import { PathFinder } from './path'
 import {
-  unitDefs, buildingDefs, VS, START_CREDITS, HARVEST_LOAD, BUILD_RADIUS,
+  unitDefs, buildingDefs, VS, START_CREDITS, HARVEST_LOAD, BUILD_RADIUS, QUEUES, RANKS, RANK_NAME, reaches,
   type UnitDef, type BuildingDef, type WeaponDef, type Queue, type Proj, type WClass,
 } from './defs'
 import type { Faction } from './colors'
 import { mulberry32 } from '../core/rng'
 
-export type Order = 'idle' | 'move' | 'attack' | 'amove' | 'harvest'
+export type Order = 'idle' | 'move' | 'attack' | 'amove' | 'harvest' | 'board' | 'unload' | 'strike'
+/** a jet: parked at home, flying out to a strike, flying back, coming in to land */
+export type JState = 'park' | 'out' | 'back' | 'land'
 export type HState = 'idle' | 'toOre' | 'mining' | 'toRef' | 'unload'
 
 export interface QItem {
@@ -90,6 +92,30 @@ export class Ent {
   lastAttacker: Ent | null = null
   selected = false
   smokeT = 0
+  // carrying and being carried
+  passengers: Ent[] = []
+  carriedBy: Ent | null = null
+  boardOn: Ent | null = null
+  unloadAt: { x: number; y: number } | null = null
+  // jets
+  home = 0
+  slot = -1
+  js: JState = 'park'
+  ammo = 1
+  rearm = 0
+  strike: { e: Ent | null; x: number; y: number } | null = null
+  jspeed = 0
+  // a carrier's own jets
+  planes = 0
+  planeT = 0
+  launchT = 0
+  // experience, stealth and looks
+  kills = 0
+  rank = 0
+  stillT = 0
+  firedT = -99
+  flashT = -99
+  wakeT = 0
   constructor(public owner: number, public key: string, def: UnitDef | BuildingDef, isB: boolean) {
     this.isB = isB
     if (isB) this.b = def as BuildingDef
@@ -106,6 +132,16 @@ export class Ent {
   }
   get air(): boolean {
     return !!this.u?.air
+  }
+  get naval(): boolean {
+    return !!this.u?.naval
+  }
+  get jet(): boolean {
+    return !!this.u?.jet
+  }
+  /** a sniper keeping still */
+  get hidden(): boolean {
+    return !!this.u?.stealth && this.stillT > 2.5
   }
   get sight(): number {
     return (this.isB ? this.b!.sight : this.u!.sight)
@@ -129,9 +165,11 @@ export interface Shot {
   cls: WClass
   splash: number
   trailT: number
+  /** the shooter, for its record */
+  src: number
 }
 
-export type FxKind = 'exp' | 'smoke' | 'fire' | 'flash' | 'spark' | 'dust' | 'debris'
+export type FxKind = 'exp' | 'smoke' | 'fire' | 'flash' | 'spark' | 'dust' | 'debris' | 'wake' | 'splash'
 export interface Fx {
   kind: FxKind
   x: number
@@ -154,6 +192,7 @@ export interface Wreck {
   tdir: number
   t: number
   air: boolean
+  naval: boolean
 }
 
 export interface Msg {
@@ -162,17 +201,23 @@ export interface Msg {
   kind: 'info' | 'warn' | 'good'
 }
 
+export type TimeOfDay = 'day' | 'dusk' | 'night'
+export type Weather = 'clear' | 'clouds' | 'rain'
+
 export interface GameOpts {
   seed: number
   faction: Faction
   difficulty: 0 | 1 | 2
+  mapType: MapType
+  tod: TimeOfDay
+  weather: Weather
 }
-
-const QUEUE_PRODUCER: Record<Queue, string> = { build: 'hq', inf: 'barracks', veh: 'factory', air: 'helipad' }
 
 export class Game {
   map: GameMap
   pf: PathFinder
+  /** path finding on the water */
+  npf: PathFinder
   ents: Ent[] = []
   byId = new Map<number, Ent>()
   players: Player[] = []
@@ -200,8 +245,9 @@ export class Game {
   onSound: (name: string, x: number, y: number) => void = () => {}
 
   constructor(public opts: GameOpts) {
-    this.map = generateMap(opts.seed)
+    this.map = generateMap(opts.seed, opts.mapType)
     this.pf = new PathFinder(this.map)
+    this.npf = new PathFinder(this.map, (i) => this.map.navI(i))
     this.fog = new Uint8Array(this.map.N * this.map.N)
     this.head = new Int32Array(this.map.N * this.map.N)
     const enemy: Faction = opts.faction === 'nato' ? 'ru' : 'nato'
@@ -211,7 +257,7 @@ export class Game {
       const f = factions[i]
       this.players.push({
         id: i, faction: f, ai: i === 1, credits: START_CREDITS, powerProd: 0, powerUse: 0,
-        units: unitDefs(f), queues: { build: [], inf: [], veh: [], air: [] }, alive: true,
+        units: unitDefs(f), queues: { build: [], inf: [], veh: [], air: [], sea: [] }, alive: true,
         stats: { built: 0, lost: 0, killed: 0, harvested: 0 }, primary: {}, income: 0,
       })
     }
@@ -258,7 +304,8 @@ export class Game {
     this.ents.push(e)
     this.byId.set(e.id, e)
     if (def.harvester) e.hs = 'toOre'
-    if (def.air) e.order = 'move'
+    if (def.air && !def.jet) e.order = 'move'
+    if (def.carrier) e.planes = def.carrier
     return e
   }
 
@@ -309,14 +356,28 @@ export class Game {
         if (!m.buildable(x, y)) return false
         for (const u of this.ents) if (!u.isB && !u.dead && !u.air && u.owner !== p && Math.floor(u.x) === x && Math.floor(u.y) === y) return false
       }
+    // a shipyard needs open water along its side
+    if (def.shore && this.shoreTiles(tx, ty, def.w, def.h) < 3) return false
     // close enough to a building of our own
+    const reach = def.reach ?? BUILD_RADIUS
     for (const e of this.ents) {
       if (!e.isB || e.dead || e.owner !== p) continue
       const dx = Math.max(e.tx - (tx + def.w), tx - (e.tx + e.w), 0)
       const dy = Math.max(e.ty - (ty + def.h), ty - (e.ty + e.h), 0)
-      if (Math.max(dx, dy) <= BUILD_RADIUS) return true
+      if (Math.max(dx, dy) <= reach) return true
     }
     return false
+  }
+
+  /** how many water tiles touch the edge of a footprint */
+  shoreTiles(tx: number, ty: number, w: number, h: number): number {
+    let n = 0
+    for (let y = ty - 1; y <= ty + h; y++)
+      for (let x = tx - 1; x <= tx + w; x++) {
+        if (x >= tx && x < tx + w && y >= ty && y < ty + h) continue
+        if (this.map.nav(x, y)) n++
+      }
+    return n
   }
 
   // ─────────────────────────────────────────────────────── production
@@ -358,10 +419,10 @@ export class Game {
     for (const pl of this.players) {
       if (!pl.alive) continue
       const low = pl.powerUse > pl.powerProd
-      for (const q of ['build', 'inf', 'veh', 'air'] as Queue[]) {
+      for (const q of QUEUES) {
         const it = pl.queues[q][0]
         if (!it || it.ready) continue
-        const prod = QUEUE_PRODUCER[q]
+        const prod = q === 'build' ? 'hq' : pl.units[it.key].producer
         const n = this.ents.filter((e) => e.isB && !e.dead && e.owner === pl.id && e.key === prod && e.built >= 1).length
         if (!n) continue
         const def = q === 'build' ? this.bdefs[it.key] : pl.units[it.key]
@@ -395,13 +456,66 @@ export class Game {
     return w ? { x: w.x + 0.5, y: w.y + 0.5 } : { x: b.x, y: b.y + b.h }
   }
 
+  /** where a parked jet stands on an airfield */
+  slotPos(b: Ent, s: number): { x: number; y: number } {
+    return { x: b.tx + 0.6 + s * 1.125, y: b.ty + 2.25 }
+  }
+
+  /** a free parking spot on one of a player's airfields, the nearest first */
+  freeSlot(owner: number, near?: { x: number; y: number }): { b: Ent; s: number } | null {
+    let best: { b: Ent; s: number } | null = null
+    let bd = 1e9
+    for (const b of this.ents) {
+      if (!b.isB || b.dead || b.owner !== owner || b.key !== 'airfield' || b.built < 1) continue
+      const used = new Set(this.ents.filter((j) => j.jet && !j.dead && j.home === b.id).map((j) => j.slot))
+      for (let s = 0; s < (b.b!.slots ?? 3); s++) {
+        if (used.has(s)) continue
+        const d = near ? Math.hypot(b.x - near.x, b.y - near.y) : 0
+        if (d < bd) {
+          bd = d
+          best = { b, s }
+        }
+        break
+      }
+    }
+    return best
+  }
+
   private spawnFrom(pl: Player, q: Queue, key: string): boolean {
-    const prod = QUEUE_PRODUCER[q]
+    const def = pl.units[key]
+    const prod = def.producer
     const cands = this.ents.filter((e) => e.isB && !e.dead && e.owner === pl.id && e.key === prod && e.built >= 1)
     if (!cands.length) return false
     const b = cands.find((e) => e.id === pl.primary[q]) ?? cands[cands.length - 1]
-    const def = pl.units[key]
     let u: Ent
+    if (def.jet) {
+      const spot = this.freeSlot(pl.id, b)
+      if (!spot) {
+        if (Math.floor(this.time) % 15 === 0) this.msg('Alle Stellplätze auf dem Flugfeld belegt', 'warn', pl.id)
+        return false
+      }
+      const p = this.slotPos(spot.b, spot.s)
+      u = this.addUnit(pl.id, key, p.x, p.y)
+      u.home = spot.b.id
+      u.slot = spot.s
+      u.dir = u.tdir = Math.PI / 2
+      u.js = 'park'
+      u.ammo = 1
+      this.msg(`${def.name} bereit`, 'good', pl.id)
+      return true
+    }
+    if (def.naval) {
+      const w = this.npf.nearestWalkable(b.x, b.y, 8)
+      if (!w) return false
+      u = this.addUnit(pl.id, key, w.x + 0.5, w.y + 0.5)
+      const out = this.npf.nearestWalkable(w.x + (w.x - b.x) * 0.6, w.y + (w.y - b.y) * 0.6, 6) ?? w
+      u.dir = u.tdir = Math.atan2(out.y - w.y, out.x - w.x)
+      if (b.rally) this.commandMove([u], b.rally.x, b.rally.y, false)
+      else this.commandMove([u], out.x + 0.5, out.y + 0.5, false)
+      this.msg(`${def.name} bereit`, 'good', pl.id)
+      if (pl.id === 0) this.onSound('unit', u.x, u.y)
+      return true
+    }
     if (def.air) {
       u = this.addUnit(pl.id, key, b.x, b.y)
     } else {
@@ -447,18 +561,30 @@ export class Game {
 
   /** send units to a place, spread out so they do not all fight for one tile */
   commandMove(units: Ent[], x: number, y: number, attackMove: boolean) {
-    const ground = units.filter((u) => !u.isB && !u.air && !u.dead)
-    const air = units.filter((u) => !u.isB && u.air && !u.dead)
-    const slots = this.formation(x, y, ground)
-    ground.forEach((u, i) => {
-      const s = slots[i] ?? { x, y }
-      this.setDest(u, s.x, s.y)
-      u.order = attackMove ? 'amove' : 'move'
-      u.amove = attackMove ? { x: s.x, y: s.y } : null
-      u.target = null
-      u.guard = null
-      if (u.u!.harvester) u.hs = 'idle'
-    })
+    const live = units.filter((u) => !u.isB && !u.dead && !u.carriedBy)
+    const ground = live.filter((u) => !u.air && !u.naval)
+    const ships = live.filter((u) => u.naval)
+    const air = live.filter((u) => u.air && !u.jet)
+    const jets = live.filter((u) => u.jet)
+    if (jets.length) this.commandStrike(jets, null, x, y)
+    // a loaded landing ship sent onto land puts its troops ashore there
+    const tx = Math.floor(x), ty = Math.floor(y)
+    const onLand = this.map.walk(tx, ty) || (this.map.inMap(tx, ty) && this.map.bld[this.map.idx(tx, ty)] > 0)
+    for (const sh of ships.filter((u) => u.passengers.length && onLand)) this.commandUnload(sh, x, y)
+    const sailing = ships.filter((u) => !(u.passengers.length && onLand))
+    const go = (list: Ent[], slots: { x: number; y: number }[]) =>
+      list.forEach((u, i) => {
+        const s = slots[i] ?? { x, y }
+        this.setDest(u, s.x, s.y)
+        u.order = attackMove ? 'amove' : 'move'
+        u.amove = attackMove ? { x: s.x, y: s.y } : null
+        u.target = null
+        u.guard = null
+        u.boardOn = null
+        if (u.u!.harvester) u.hs = 'idle'
+      })
+    go(ground, this.formation(x, y, ground, false))
+    go(sailing, this.formation(x, y, sailing, true))
     air.forEach((u, i) => {
       const a = (i / Math.max(1, air.length)) * Math.PI * 2
       const r = air.length > 1 ? 0.8 : 0
@@ -471,49 +597,62 @@ export class Game {
     })
   }
 
-  formation(x: number, y: number, units: Ent[]): { x: number; y: number }[] {
+  formation(x: number, y: number, units: Ent[], naval: boolean): { x: number; y: number }[] {
     if (!units.length) return []
     const m = this.map
+    const pf = naval ? this.npf : this.pf
+    // boats sent onto land go to the nearest water
+    if (naval && !m.nav(Math.floor(x), Math.floor(y))) {
+      const w = this.npf.nearestWalkable(x, y, 30)
+      if (w) {
+        x = w.x + 0.5
+        y = w.y + 0.5
+      }
+    }
     const cx = Math.floor(x), cy = Math.floor(y)
     const tiles: { x: number; y: number; d: number }[] = []
-    const need = units.reduce((n, u) => n + (u.u!.infantry ? 0.34 : 1), 0)
-    for (let r = 0; r < 12 && tiles.length < need * 1.2 + 1; r++)
+    const need = units.reduce((n, u) => n + (u.u!.infantry ? 0.34 : u.radius > 0.7 ? 3 : 1), 0)
+    for (let r = 0; r < 16 && tiles.length < need * 1.2 + 1; r++)
       for (let dy = -r; dy <= r; dy++)
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
-          if (!m.walk(cx + dx, cy + dy)) continue
+          if (!pf.ok(cx + dx, cy + dy)) continue
           tiles.push({ x: cx + dx, y: cy + dy, d: Math.hypot(dx, dy) })
         }
     tiles.sort((a, b) => a.d - b.d)
-    // vehicles take whole tiles; soldiers share them three to a tile
+    // vehicles take whole tiles; soldiers share them three to a tile; big ships keep a tile clear round them
     const out: { x: number; y: number }[] = new Array(units.length)
     const order = units.map((u, i) => i).sort((a, b) => Math.hypot(units[a].x - x, units[a].y - y) - Math.hypot(units[b].x - x, units[b].y - y))
     const OFF = [[0.5, 0.5], [0.25, 0.3], [0.75, 0.7], [0.3, 0.75]]
     const fill = new Map<number, number>()
-    let ti = 0
     for (const i of order) {
       const inf = units[i].u!.infantry
-      while (ti < tiles.length) {
-        const t = tiles[ti]
+      const big = units[i].radius > 0.7
+      for (const t of tiles) {
         const k = m.idx(t.x, t.y)
         const used = fill.get(k) ?? 0
         if (inf ? used < 3 && used !== -1 : used === 0) {
           const o = inf ? OFF[used + 1] : OFF[0]
           out[i] = { x: t.x + o[0], y: t.y + o[1] }
           fill.set(k, inf ? used + 1 : -1)
-          if (!inf || used + 1 >= 3) ti++
+          if (big)
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (m.inMap(t.x + dx, t.y + dy)) fill.set(m.idx(t.x + dx, t.y + dy), -1)
           break
         }
-        ti++
       }
       if (!out[i]) out[i] = { x, y }
     }
     return out
   }
 
+  pfOf(u: Ent): PathFinder {
+    return u.naval ? this.npf : this.pf
+  }
+
   setDest(u: Ent, x: number, y: number) {
+    const pf = this.pfOf(u)
     u.dest = { x, y }
-    u.path = this.pf.find(Math.floor(u.x), Math.floor(u.y), Math.floor(x), Math.floor(y))
+    u.path = pf.find(Math.floor(u.x), Math.floor(u.y), Math.floor(x), Math.floor(y))
     u.pi = 0
     u.repaths = 0
     u.stuckT = 0
@@ -526,8 +665,10 @@ export class Game {
   }
 
   commandAttack(units: Ent[], t: Ent) {
+    const jets = units.filter((u) => u.jet)
+    if (jets.length) this.commandStrike(jets, t, t.x, t.y)
     for (const u of units) {
-      if (u.isB || u.dead || !u.weapon) continue
+      if (u.isB || u.dead || !u.weapon || u.jet || u.carriedBy) continue
       if (!this.canHit(u, t)) continue
       u.order = 'attack'
       u.target = t
@@ -539,14 +680,32 @@ export class Game {
     }
   }
 
+  /** jets fly a strike at a target or a point, if they have weapons on board */
+  commandStrike(jets: Ent[], t: Ent | null, x: number, y: number) {
+    let rearming = false
+    for (const j of jets) {
+      if (!j.jet || j.dead) continue
+      if (j.ammo < 1) {
+        rearming = true
+        continue
+      }
+      j.strike = { e: t, x, y }
+      j.order = 'strike'
+      if (j.js === 'park' || j.js === 'land') j.js = 'out'
+      else j.js = 'out'
+    }
+    if (rearming && jets[0]?.owner === 0) this.msg('Jets werden noch aufmunitioniert', 'warn')
+  }
+
   commandStop(units: Ent[]) {
     for (const u of units) {
-      if (u.isB) continue
+      if (u.isB || u.jet) continue
       u.order = 'idle'
       u.target = null
       u.path = []
       u.dest = null
       u.amove = null
+      u.boardOn = null
       u.guard = { x: u.x, y: u.y }
       if (u.u!.harvester) u.hs = 'idle'
     }
@@ -575,10 +734,125 @@ export class Game {
     }
   }
 
+  /** ground units walk to a landing ship and go aboard; the ship comes to the nearest shore to meet them */
+  commandBoard(units: Ent[], tr: Ent) {
+    const troops = units.filter((u) => !u.isB && !u.dead && !u.air && !u.naval && !u.carriedBy)
+    if (!troops.length) return
+    const cx = troops.reduce((a, u) => a + u.x, 0) / troops.length
+    const cy = troops.reduce((a, u) => a + u.y, 0) / troops.length
+    // meet halfway between the troops and the ship, at the water's edge
+    const sp = this.shorePoint(cx + (tr.x - cx) * 0.25, cy + (tr.y - cy) * 0.25)
+    if (sp) {
+      this.setDest(tr, sp.water.x, sp.water.y)
+      tr.order = 'move'
+    }
+    for (const u of troops) {
+      u.order = 'board'
+      u.boardOn = tr
+      u.target = null
+      u.path = []
+      u.dest = null
+      u.repathT = 0
+      if (sp) this.setDest(u, sp.land.x, sp.land.y)
+      u.repathT = 2
+      if (u.u!.harvester) u.hs = 'idle'
+    }
+  }
+
+  /** a water tile at the shore nearest a point, and the land tile beside it */
+  shorePoint(x: number, y: number, maxR = 24): { water: { x: number; y: number }; land: { x: number; y: number } } | null {
+    const m = this.map
+    const cx = Math.floor(x), cy = Math.floor(y)
+    for (let r = 0; r <= maxR; r++) {
+      let best: { water: { x: number; y: number }; land: { x: number; y: number } } | null = null
+      let bd = 1e9
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const wx = cx + dx, wy = cy + dy
+          if (!m.nav(wx, wy) || m.ter[m.idx(wx, wy)] === Ter.Bridge) continue
+          for (const [nx, ny] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const lx = wx + nx, ly = wy + ny
+            if (!m.walk(lx, ly) || m.ter[m.idx(lx, ly)] === Ter.Bridge) continue
+            const d = Math.hypot(dx, dy)
+            if (d < bd) {
+              bd = d
+              best = { water: { x: wx + 0.5, y: wy + 0.5 }, land: { x: lx + 0.5, y: ly + 0.5 } }
+            }
+          }
+        }
+      if (best) return best
+    }
+    return null
+  }
+
+  /** a landing ship takes its troops to the shore nearest a point (or puts them ashore right here) */
+  commandUnload(tr: Ent, x?: number, y?: number) {
+    if (!tr.passengers.length) return
+    if (x === undefined || y === undefined) {
+      if (!this.unloadHere(tr, null)) this.msg('Zu weit vom Ufer zum Entladen', 'warn', tr.owner)
+      return
+    }
+    const sp = this.shorePoint(x, y, 14)
+    if (!sp) {
+      this.msg('Dort ist kein Ufer zum Anlanden', 'warn', tr.owner)
+      return
+    }
+    const best = sp.water
+    this.setDest(tr, best.x, best.y)
+    tr.order = 'unload'
+    tr.unloadAt = { x, y }
+  }
+
+  private board(u: Ent, tr: Ent) {
+    const cap = tr.u?.transport ?? 0
+    u.order = 'idle'
+    u.boardOn = null
+    if (tr.passengers.length >= cap) {
+      this.msg('Das Landungsschiff ist voll', 'warn', u.owner)
+      return
+    }
+    tr.passengers.push(u)
+    u.carriedBy = tr
+    u.selected = false
+    u.path = []
+    u.dest = null
+    u.target = null
+    this.onSound('board', u.x, u.y)
+  }
+
+  /** everyone off onto the nearest land; returns false if there is none in reach */
+  private unloadHere(tr: Ent, goal: { x: number; y: number } | null): boolean {
+    const m = this.map
+    const spots: { x: number; y: number; d: number }[] = []
+    const cx = Math.floor(tr.x), cy = Math.floor(tr.y)
+    for (let dy = -3; dy <= 3; dy++)
+      for (let dx = -3; dx <= 3; dx++) {
+        const x = cx + dx, y = cy + dy
+        if (!m.walk(x, y) || m.ter[m.idx(x, y)] === Ter.Bridge) continue
+        const d = Math.hypot(x + 0.5 - tr.x, y + 0.5 - tr.y)
+        if (d < 3.2) spots.push({ x, y, d })
+      }
+    if (!spots.length) return false
+    spots.sort((a, b) => a.d - b.d)
+    const out = tr.passengers.splice(0)
+    out.forEach((u, i) => {
+      const s = spots[Math.min(spots.length - 1, Math.floor(i / (u.u!.infantry ? 3 : 1)))]
+      u.carriedBy = null
+      u.x = s.x + 0.3 + this.rand() * 0.4
+      u.y = s.y + 0.3 + this.rand() * 0.4
+      u.order = 'idle'
+      u.guard = { x: u.x, y: u.y }
+    })
+    if (goal) this.commandMove(out, goal.x, goal.y, false)
+    this.onSound('unload', tr.x, tr.y)
+    return true
+  }
+
   canHit(u: Ent, t: Ent): boolean {
     const w = u.weapon
-    if (!w || t.dead) return false
-    return t.air ? w.air : w.ground
+    if (!w || t.dead || t.carriedBy) return false
+    return reaches(w, t)
   }
 
   // ─────────────────────────────────────────────────────── the tick
@@ -606,7 +880,8 @@ export class Game {
       w.t += dt
       if (w.t < 14 && this.rand() < dt * 2.2) this.addFx('smoke', w.x, w.y, 6, 0, 0, 10 + this.rand() * 6, 2.5, 3)
       if (w.t < 6 && this.rand() < dt * 5) this.addFx('fire', w.x + (this.rand() - 0.5) * 0.3, w.y + (this.rand() - 0.5) * 0.3, 4, 0, 0, 0, 0.6, 1)
-      if (w.t > 40) this.wrecks.splice(i, 1)
+      if (w.naval && this.rand() < dt * 6) this.addFx('wake', w.x + (this.rand() - 0.5), w.y + (this.rand() - 0.5), 0, 0, 0, 0, 1.2, 2)
+      if (w.t > (w.naval ? 9 : 40)) this.wrecks.splice(i, 1)
     }
     this.fogT -= dt
     if (this.fogT <= 0) {
@@ -680,9 +955,44 @@ export class Game {
   }
 
   private updateUnit(u: Ent, dt: number) {
-    u.anim += dt
     const def = u.u!
+    // aboard a ship: just ride along
+    if (u.carriedBy) {
+      u.x = u.carriedBy.x
+      u.y = u.carriedBy.y
+      return
+    }
+    if (def.jet) {
+      this.updateJet(u, dt)
+      return
+    }
+    u.anim += dt
     const w = def.weapon
+    // experience: the best heal themselves
+    if (u.rank >= 3 && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.01 * dt)
+    // keeping still (for snipers)
+    if (u.moving || this.time - u.firedT < 0.5) u.stillT = 0
+    else u.stillT += dt
+    if (def.carrier) this.carrierDeck(u, dt)
+    if (u.order === 'board') {
+      const tr = u.boardOn
+      if (!tr || tr.dead) {
+        u.order = 'idle'
+        u.boardOn = null
+      } else if (Math.hypot(tr.x - u.x, tr.y - u.y) < tr.radius + 1.7) {
+        this.board(u, tr)
+        return
+      } else {
+        u.repathT -= dt
+        if (u.repathT <= 0 || (!u.path.length && !u.dest && u.repathT < 1)) {
+          u.repathT = 2
+          const sp = this.shorePoint(tr.x, tr.y, 6)
+          if (sp) this.setDest(u, sp.land.x, sp.land.y)
+        }
+      }
+      this.move(u, dt)
+      return
+    }
     // targets
     if (u.target && (u.target.dead || (u.target.owner !== u.owner && !this.visibleTo(u.owner, u.target) && u.order !== 'attack'))) {
       u.target = null
@@ -741,6 +1051,29 @@ export class Game {
     if (def.harvester) this.harvest(u, dt)
     this.move(u, dt)
     if (w) this.aimAndFire(u, dt)
+    if (u.order === 'unload' && !u.dest && !u.path.length) {
+      if (!this.unloadHere(u, u.unloadAt)) this.msg('Kein Ufer in Reichweite zum Entladen', 'warn', u.owner)
+      u.order = 'idle'
+      u.unloadAt = null
+    }
+    // wakes behind boats, dust behind vehicles off the road
+    if (u.moving && u.speedNow > 0.4) {
+      u.wakeT -= dt
+      if (u.wakeT <= 0) {
+        if (u.naval) {
+          u.wakeT = 0.07
+          const back = u.radius * 0.9
+          const bx = u.x - Math.cos(u.dir) * back, by = u.y - Math.sin(u.dir) * back
+          const side = (this.rand() - 0.5) * u.radius * 0.8
+          this.addFx('wake', bx - Math.sin(u.dir) * side, by + Math.cos(u.dir) * side, 0, -Math.cos(u.dir) * 0.3, -Math.sin(u.dir) * 0.3, 0, 1.4 + u.radius, u.radius > 0.7 ? 3 : 2)
+          this.addFx('wake', u.x + Math.cos(u.dir) * u.radius * 0.8, u.y + Math.sin(u.dir) * u.radius * 0.8, 0, -Math.sin(u.dir) * 0.5, Math.cos(u.dir) * 0.5, 0, 0.6, 1)
+        } else if (!u.air && !def.infantry) {
+          u.wakeT = 0.18
+          const t = this.map.ter[this.map.idx(Math.floor(u.x), Math.floor(u.y))]
+          if (t !== Ter.Road && t !== Ter.Bridge && t !== Ter.Grass) this.addFx('dust', u.x - Math.cos(u.dir) * 0.4, u.y - Math.sin(u.dir) * 0.4, 1, 0, 0, 3, 0.9, 1)
+        }
+      }
+    }
     // arriving ends a move order
     if (!u.dest && !u.path.length) {
       if (u.order === 'move' || (u.order === 'amove' && !u.target)) {
@@ -750,14 +1083,204 @@ export class Game {
       }
     }
     // helicopters climb after take-off and stay up
-    if (u.air) {
+    if (u.air && !def.jet) {
       const want = 30
       u.z += Math.sign(want - u.z) * Math.min(Math.abs(want - u.z), dt * 14)
     }
   }
 
-  private mountsTurret(u: Ent): boolean {
-    return !u.u!.infantry && u.key !== 'harv' && u.key !== 'heli'
+  mountsTurret(u: Ent): boolean {
+    const d = u.u!
+    return !d.infantry && !d.harvester && !d.air && !d.transport && !d.carrier
+  }
+
+  // ─────────────────────────────────────────────────────── jets and carriers
+
+  /** where a jet comes down: its slot on the airfield, or the carrier's deck */
+  private jetHome(u: Ent): { x: number; y: number; b: Ent } | null {
+    let h = this.byId.get(u.home)
+    if (h && !h.dead) {
+      if (h.isB) return { ...this.slotPos(h, u.slot), b: h }
+      return { x: h.x, y: h.y, b: h }
+    }
+    // home is gone: any free slot or carrier with room
+    const spot = this.freeSlot(u.owner, u)
+    if (spot) {
+      u.home = spot.b.id
+      u.slot = spot.s
+      return { ...this.slotPos(spot.b, spot.s), b: spot.b }
+    }
+    for (const c of this.ents) {
+      if (c.dead || c.owner !== u.owner || !c.u?.carrier) continue
+      const out = this.ents.filter((j) => j.jet && !j.dead && j.home === c.id).length
+      if (c.planes + out < c.u.carrier) {
+        u.home = c.id
+        u.slot = -1
+        h = c
+        return { x: c.x, y: c.y, b: c }
+      }
+    }
+    return null
+  }
+
+  private fly(u: Ent, tx: number, ty: number, dt: number, speed: number, alt: number) {
+    const def = u.u!
+    const want = Math.atan2(ty - u.y, tx - u.x)
+    u.dir = turnTo(u.dir, want, def.turn * dt)
+    u.tdir = u.dir
+    u.jspeed += Math.sign(speed - u.jspeed) * Math.min(Math.abs(speed - u.jspeed), dt * 4)
+    u.x += Math.cos(u.dir) * u.jspeed * dt
+    u.y += Math.sin(u.dir) * u.jspeed * dt
+    const N = this.map.N
+    u.x = Math.max(-4, Math.min(N + 4, u.x))
+    u.y = Math.max(-4, Math.min(N + 4, u.y))
+    u.z += Math.sign(alt - u.z) * Math.min(Math.abs(alt - u.z), dt * 22)
+    u.moving = true
+  }
+
+  private updateJet(u: Ent, dt: number) {
+    const def = u.u!
+    u.anim += dt
+    switch (u.js) {
+      case 'park': {
+        u.moving = false
+        u.jspeed = 0
+        u.z = 0
+        const h = this.byId.get(u.home)
+        if (!h || h.dead) {
+          // the airfield is gone: fly to another one if there is one
+          if (this.jetHome(u)) u.js = 'back'
+          else this.kill(u, -1)
+          return
+        }
+        if (u.ammo < 1) {
+          const low = this.players[u.owner].powerUse > this.players[u.owner].powerProd
+          u.rearm += dt * (low ? 0.5 : 1)
+          if (u.rearm >= 6) {
+            u.ammo = 1
+            u.rearm = 0
+            if (u.owner === 0) this.msg(`${def.name} wieder einsatzbereit`, 'good')
+          }
+        }
+        return
+      }
+      case 'out': {
+        const s = u.strike
+        if (!s || (s.e && s.e.dead)) {
+          u.js = 'back'
+          return
+        }
+        const tx = s.e ? s.e.x : s.x, ty = s.e ? s.e.y : s.y
+        this.fly(u, tx, ty, dt, def.speed, 34)
+        // the volley
+        if (u.burst > 0) {
+          u.burstT -= dt
+          if (u.burstT <= 0) {
+            u.burstT = def.weapon!.gap ?? 0.2
+            u.burst--
+            this.fireAt(u, s.e, tx, ty)
+            if (u.burst === 0) {
+              u.ammo = 0
+              u.js = 'back'
+              u.strike = null
+              u.order = 'idle'
+            }
+          }
+          return
+        }
+        const d = Math.hypot(tx - u.x, ty - u.y)
+        const off = Math.abs(angDiff(u.dir, Math.atan2(ty - u.y, tx - u.x)))
+        if (u.ammo >= 1 && d < def.weapon!.range && d > 1.5 && off < 0.3 && u.z > 20) {
+          u.burst = def.weapon!.burst ?? 1
+          u.burstT = 0
+        }
+        return
+      }
+      case 'back': {
+        const h = this.jetHome(u)
+        if (!h) {
+          // nowhere to land: it circles until the fuel runs out
+          u.rearm += dt
+          this.fly(u, u.x + Math.cos(u.dir + 0.5), u.y + Math.sin(u.dir + 0.5), dt, def.speed * 0.8, 34)
+          if (u.rearm > 25) this.kill(u, -1)
+          return
+        }
+        this.fly(u, h.x, h.y, dt, def.speed, 30)
+        if (Math.hypot(h.x - u.x, h.y - u.y) < 3) u.js = 'land'
+        return
+      }
+      case 'land': {
+        const h = this.jetHome(u)
+        if (!h) {
+          u.js = 'back'
+          return
+        }
+        const d = Math.hypot(h.x - u.x, h.y - u.y)
+        const want = Math.atan2(h.y - u.y, h.x - u.x)
+        u.jspeed = Math.max(0.6, Math.min(def.speed * 0.5, d * 2))
+        if (d > 0.1) u.dir = turnTo(u.dir, want, def.turn * 2 * dt)
+        const step = Math.min(d, u.jspeed * dt)
+        u.x += Math.cos(want) * step
+        u.y += Math.sin(want) * step
+        const deck = h.b.isB ? 0 : 6
+        u.z = Math.max(deck, Math.min(u.z, deck + d * 9))
+        if (d < 0.12) {
+          if (!h.b.isB) {
+            // stowed below deck
+            h.b.planes++
+            u.dead = true
+            u.selected = false
+            this.byId.delete(u.id)
+            return
+          }
+          u.js = 'park'
+          u.z = 0
+          u.dir = u.tdir = Math.PI / 2
+          u.moving = false
+        }
+        return
+      }
+    }
+  }
+
+  /** a carrier rebuilds lost jets and sends them at anything in reach */
+  private carrierDeck(u: Ent, dt: number) {
+    const cap = u.u!.carrier!
+    const out = this.ents.filter((j) => j.jet && !j.dead && j.home === u.id).length
+    if (u.planes + out < cap) {
+      u.planeT += dt
+      if (u.planeT > 22) {
+        u.planeT = 0
+        u.planes++
+      }
+    }
+    u.launchT -= dt
+    if (u.planes <= 0 || u.launchT > 0) return
+    u.launchT = 1
+    // the nearest enemy on land or water it can see
+    let best: Ent | null = null
+    let bd = 17
+    for (const e of this.ents) {
+      if (e.dead || e.owner === u.owner || e.air || e.carriedBy) continue
+      const d = Math.hypot(e.x - u.x, e.y - u.y)
+      if (d < bd && this.visibleTo(u.owner, e)) {
+        bd = d
+        best = e
+      }
+    }
+    if (!best) return
+    const j = this.addUnit(u.owner, 'jet', u.x, u.y)
+    j.home = u.id
+    j.slot = -1
+    j.z = 6
+    j.dir = j.tdir = u.dir
+    j.jspeed = 3
+    j.js = 'out'
+    j.order = 'strike'
+    j.strike = { e: best, x: best.x, y: best.y }
+    u.planes--
+    u.launchT = 3
+    this.onSound('jet', u.x, u.y)
   }
 
   private harvest(u: Ent, dt: number) {
@@ -802,7 +1325,7 @@ export class Game {
         if (this.rand() < dt * 4) this.addFx('dust', u.x + (this.rand() - 0.5) * 0.4, u.y + (this.rand() - 0.5) * 0.4, 2, 0, 0, 4, 0.8, 2)
         if (u.mineT >= 0.5) {
           u.mineT = 0
-          const take = Math.min(40, m.ore[u.oreTile], HARVEST_LOAD - u.cargo)
+          const take = Math.min(50, m.ore[u.oreTile], HARVEST_LOAD - u.cargo)
           m.ore[u.oreTile] -= take
           u.cargo += take
           if (m.ore[u.oreTile] <= 0) {
@@ -961,8 +1484,8 @@ export class Game {
         const off = Math.abs(angDiff(u.dir, want))
         k = off < 0.35 ? 1 : off < 1.2 ? 0.45 : 0.05
       } else u.dir = want
-      const t = m.ter[m.idx(Math.floor(u.x), Math.floor(u.y))]
-      const terrain = t === Ter.Road || t === Ter.Bridge ? 1.25 : t === Ter.Field ? 0.92 : 1
+      const t = m.ter[m.idx(Math.max(0, Math.min(N - 1, Math.floor(u.x))), Math.max(0, Math.min(N - 1, Math.floor(u.y))))]
+      const terrain = u.naval ? 1 : t === Ter.Road || t === Ter.Bridge ? 1.25 : t === Ter.Field ? 0.92 : t === Ter.Sand ? 0.85 : 1
       const target = def.speed * terrain * k
       u.speedNow += (target - u.speedNow) * Math.min(1, dt * (def.infantry ? 10 : 3))
       const step = Math.min(d, u.speedNow * dt)
@@ -1000,18 +1523,19 @@ export class Game {
   private tryMove(u: Ent, dx: number, dy: number) {
     const m = this.map
     const r = Math.min(0.3, u.u!.radius)
+    const pass = u.naval ? (x: number, y: number) => m.nav(x, y) : (x: number, y: number) => m.walk(x, y)
     const ok = (x: number, y: number) =>
-      m.walk(Math.floor(x - r * 0.7), Math.floor(y - r * 0.7)) && m.walk(Math.floor(x + r * 0.7), Math.floor(y + r * 0.7)) &&
-      m.walk(Math.floor(x - r * 0.7), Math.floor(y + r * 0.7)) && m.walk(Math.floor(x + r * 0.7), Math.floor(y - r * 0.7))
+      pass(Math.floor(x - r * 0.7), Math.floor(y - r * 0.7)) && pass(Math.floor(x + r * 0.7), Math.floor(y + r * 0.7)) &&
+      pass(Math.floor(x - r * 0.7), Math.floor(y + r * 0.7)) && pass(Math.floor(x + r * 0.7), Math.floor(y - r * 0.7))
     const nx = u.x + dx, ny = u.y + dy
     if (ok(nx, ny)) {
       u.x = nx
       u.y = ny
     } else if (ok(nx, u.y)) u.x = nx
     else if (ok(u.x, ny)) u.y = ny
-    else if (!m.walk(Math.floor(u.x), Math.floor(u.y))) {
+    else if (!pass(Math.floor(u.x), Math.floor(u.y))) {
       // inside something (a building went up on top): get out
-      const w = this.pf.nearestWalkable(u.x, u.y)
+      const w = this.pfOf(u).nearestWalkable(u.x, u.y)
       if (w) {
         u.x = w.x + 0.5
         u.y = w.y + 0.5
@@ -1027,7 +1551,7 @@ export class Game {
     const N = this.map.N
     for (let i = 0; i < n; i++) {
       const e = this.ents[i]
-      if (e.isB || e.dead || e.air) {
+      if (e.isB || e.dead || e.air || e.carriedBy) {
         this.next[i] = -2
         continue
       }
@@ -1043,16 +1567,17 @@ export class Game {
     const list = this.list
     for (let i = 0; i < list.length; i++) {
       const a = list[i]
-      if (a.isB || a.dead || a.air) continue
+      if (a.isB || a.dead || a.air || a.carriedBy) continue
       const cx = Math.floor(a.x), cy = Math.floor(a.y)
-      for (let ty = cy - 1; ty <= cy + 1; ty++) {
+      const reach = a.naval ? 2 : 1
+      for (let ty = cy - reach; ty <= cy + reach; ty++) {
         if (ty < 0 || ty >= N) continue
-        for (let tx = cx - 1; tx <= cx + 1; tx++) {
+        for (let tx = cx - reach; tx <= cx + reach; tx++) {
           if (tx < 0 || tx >= N) continue
           for (let j = this.head[ty * N + tx]; j >= 0; j = this.next[j]) {
             if (j <= i) continue
             const b = list[j]
-            if (b.dead) continue
+            if (b.dead || b.naval !== a.naval) continue
             const dx = b.x - a.x, dy = b.y - a.y
             const d = Math.hypot(dx, dy)
             const min = (a.u!.radius + b.u!.radius) * (a.u!.infantry && b.u!.infantry ? 0.9 : 1)
@@ -1087,17 +1612,32 @@ export class Game {
 
   visibleTo(p: number, e: Ent): boolean {
     if (e.owner === p) return true
+    if (e.carriedBy) return false
+    // a sniper keeping still is only seen from close by
+    if (e.hidden) {
+      let near = false
+      for (const o of this.ents) {
+        if (o.owner !== p || o.dead || o.isB || o.carriedBy) continue
+        if (Math.hypot(o.x - e.x, o.y - e.y) < 2.2) {
+          near = true
+          break
+        }
+      }
+      if (!near) return false
+    }
     if (p === 0) {
-      const i = this.map.idx(Math.max(0, Math.min(this.map.N - 1, Math.floor(e.x))), Math.max(0, Math.min(this.map.N - 1, Math.floor(e.y))))
+      const N = this.map.N
       if (e.isB) {
         for (let y = e.ty; y < e.ty + e.h; y++) for (let x = e.tx; x < e.tx + e.w; x++) if (this.fog[this.map.idx(x, y)] === 2) return true
         return false
       }
-      return this.fog[i] === 2
+      const tx = Math.floor(e.x), ty = Math.floor(e.y)
+      if (tx < 0 || ty < 0 || tx >= N || ty >= N) return false
+      return this.fog[ty * N + tx] === 2
     }
     // the computer sees what its units and buildings see
     for (const o of this.ents) {
-      if (o.owner !== p || o.dead) continue
+      if (o.owner !== p || o.dead || o.carriedBy) continue
       if (Math.hypot(o.x - e.x, o.y - e.y) <= o.sight + (e.isB ? e.radius : 0)) return true
     }
     return false
@@ -1109,8 +1649,8 @@ export class Game {
     let best: Ent | null = null
     let bs = 1e9
     for (const e of this.ents) {
-      if (e.dead || e.owner === u.owner) continue
-      if (e.air ? !w.air : !w.ground) continue
+      if (e.dead || e.owner === u.owner || e.carriedBy) continue
+      if (!reaches(w, e)) continue
       const d = this.dist(u, e)
       if (d > range) continue
       if (w.minRange && d < w.minRange) continue
@@ -1135,7 +1675,7 @@ export class Game {
       if (u.burstT <= 0 && t && !t.dead) {
         u.burst--
         u.burstT = w.gap ?? 0.1
-        this.fire(u, t)
+        this.fireAt(u, t, t.x, t.y)
       } else if (!t || t.dead) u.burst = 0
       return
     }
@@ -1148,12 +1688,17 @@ export class Game {
     const d = this.dist(u, t)
     const want = Math.atan2(t.y - u.y, t.x - u.x)
     let aligned: boolean
+    // missiles leave their cells straight up, so a ship need not turn for them
+    const vertical = w.proj === 'missile'
     if (u.isB || this.mountsTurret(u)) {
       u.tdir = turnTo(u.tdir, want, dt * (u.key === 'art' ? 1.4 : 3.2))
-      aligned = Math.abs(angDiff(u.tdir, want)) < 0.12
+      aligned = vertical || Math.abs(angDiff(u.tdir, want)) < 0.12
     } else if (u.u!.infantry) {
       if (!u.moving) u.dir = want
       aligned = !u.moving
+      u.tdir = u.dir
+    } else if (u.naval) {
+      aligned = true
       u.tdir = u.dir
     } else {
       // no turret: the whole thing turns (helicopters)
@@ -1167,41 +1712,47 @@ export class Game {
     u.cd = w.reload * (0.92 + this.rand() * 0.16)
     u.burst = (w.burst ?? 1) - 1
     u.burstT = w.gap ?? 0.1
-    this.fire(u, t)
+    this.fireAt(u, t, t.x, t.y)
   }
 
-  private fire(u: Ent, t: Ent) {
+  /** one shot from a unit at a target, or at a point on the ground */
+  fireAt(u: Ent, t: Ent | null, tx: number, ty: number) {
     const w = u.weapon!
     const yaw = u.isB || this.mountsTurret(u) ? u.tdir : u.dir
-    const mz = u.isB ? (u.key === 'bunker' ? 7 : 4) : u.air ? u.z : u.u!.infantry ? 5 : 7
-    const along = u.isB ? 0.3 : u.u!.infantry ? 0.25 : u.radius + 0.15
-    const side = w.burst && w.burst > 1 && !u.u?.infantry ? (u.burst % 2 ? 0.18 : -0.18) : 0
+    const mz = u.isB ? (u.key === 'bunker' ? 7 : 4) : u.air ? u.z : u.u!.infantry ? 5 : u.naval ? 9 : 7
+    const along = u.isB ? 0.3 : u.u!.infantry ? 0.25 : u.jet ? 0.2 : u.radius * 0.8 + 0.15
+    const side = w.burst && w.burst > 1 && !u.u?.infantry ? (u.burst % 2 ? 0.2 : -0.2) : 0
     const x0 = u.x + Math.cos(yaw) * along - Math.sin(yaw) * side
     const y0 = u.y + Math.sin(yaw) * along + Math.cos(yaw) * side
-    let x1 = t.x, y1 = t.y
-    const z1 = t.air ? t.z : t.isB ? 8 : 3
-    // artillery is not exact
-    if (w.proj === 'art' || w.proj === 'mlrs') {
+    let x1 = t ? t.x : tx, y1 = t ? t.y : ty
+    const z1 = t ? (t.air ? t.z : t.isB ? 8 : t.naval ? 5 : 3) : 0
+    // artillery and missiles at a point are not exact
+    if (w.proj === 'art' || w.proj === 'mlrs' || (!t && w.proj === 'missile')) {
       const spread = w.proj === 'mlrs' ? 1.2 : 0.5
       x1 += (this.rand() - 0.5) * spread * 2
       y1 += (this.rand() - 0.5) * spread * 2
-    } else if (t.isB) {
+    } else if (t && t.isB) {
       x1 += (this.rand() - 0.5) * t.w * 0.6
       y1 += (this.rand() - 0.5) * t.h * 0.6
     }
     const dist = Math.hypot(x1 - x0, y1 - y0)
-    const speed = { bullet: 26, flak: 24, shell: 20, rocket: 9, art: 7, mlrs: 8 }[w.proj]
-    const T = Math.max(0.05, dist / speed + (w.proj === 'art' ? 0.6 : 0))
+    const SPEED: Record<string, number> = { bullet: 26, flak: 24, shell: 20, rocket: 9, art: 7, mlrs: 8, missile: 8, snipe: 40 }
+    const T = Math.max(0.05, dist / SPEED[w.proj] + (w.proj === 'art' ? 0.6 : 0))
+    const lob = w.proj === 'missile' && !u.air
     this.shots.push({
-      kind: w.proj, owner: u.owner, x0, y0, z0: mz, x1, y1, z1, target: w.proj === 'art' || w.proj === 'mlrs' ? null : t,
-      t: 0, T, arc: w.proj === 'art' ? dist * 9 + 20 : w.proj === 'mlrs' ? dist * 6 + 16 : w.proj === 'rocket' ? 4 : 0,
-      dmg: w.dmg, cls: w.cls, splash: w.splash ?? 0, trailT: 0,
+      kind: w.proj, owner: u.owner, x0, y0, z0: mz, x1, y1, z1,
+      target: w.proj === 'art' || w.proj === 'mlrs' ? null : t,
+      t: 0, T,
+      arc: w.proj === 'art' ? dist * 9 + 20 : w.proj === 'mlrs' ? dist * 6 + 16 : lob ? dist * 4 + 30 : w.proj === 'rocket' ? 4 : 0,
+      dmg: w.dmg * (1 + 0.12 * u.rank), cls: w.cls, splash: w.splash ?? 0, trailT: 0, src: u.id,
     })
+    u.firedT = this.time
     // muzzle flash
-    this.addFx('flash', x0, y0, mz, 0, 0, 0, w.proj === 'art' ? 0.18 : 0.08, w.proj === 'art' || w.proj === 'shell' ? 3 : 1.5)
-    if (w.proj === 'art' || w.proj === 'shell') this.addFx('smoke', x0, y0, mz, 0, 0, 6, 1.4, w.proj === 'art' ? 4 : 2)
+    const heavy = w.proj === 'art' || w.proj === 'shell' || w.proj === 'missile'
+    this.addFx('flash', x0, y0, mz, 0, 0, 0, w.proj === 'art' ? 0.18 : 0.08, heavy ? 3 : w.proj === 'snipe' ? 1 : 1.5)
+    if (heavy) this.addFx('smoke', x0, y0, mz, 0, 0, 6, 1.4, w.proj === 'art' || w.proj === 'missile' ? 4 : 2)
     this.onSound(w.proj, u.x, u.y)
-    if (!u.isB && !u.u!.infantry) u.speedNow *= 0.85
+    if (!u.isB && !u.u!.infantry && !u.jet) u.speedNow *= 0.85
   }
 
   private updateShots(dt: number) {
@@ -1213,12 +1764,12 @@ export class Game {
         s.y1 = s.target.y
         if (s.target.air) s.z1 = s.target.z
       }
-      if (s.kind === 'rocket' || s.kind === 'mlrs') {
+      if (s.kind === 'rocket' || s.kind === 'mlrs' || s.kind === 'missile') {
         s.trailT -= dt
         if (s.trailT <= 0) {
-          s.trailT = 0.04
+          s.trailT = s.kind === 'missile' ? 0.03 : 0.04
           const p = this.shotPos(s)
-          this.addFx('smoke', p.x, p.y, p.z, 0, 0, 3, 0.7, 1)
+          this.addFx('smoke', p.x, p.y, p.z, 0, 0, 3, s.kind === 'missile' ? 1.1 : 0.7, 1)
         }
       }
       if (s.t >= s.T) {
@@ -1237,30 +1788,41 @@ export class Game {
     }
   }
 
+  private wet(x: number, y: number): boolean {
+    return this.map.nav(Math.floor(x), Math.floor(y)) && this.map.ter[this.map.idx(Math.floor(x), Math.floor(y))] === Ter.Water
+  }
+
   private impact(s: Shot) {
-    const big = s.kind === 'art' || s.kind === 'mlrs'
+    const big = s.kind === 'art' || s.kind === 'mlrs' || s.kind === 'missile'
+    const water = this.wet(s.x1, s.y1)
     if (s.splash > 0) {
       for (const e of this.ents) {
-        if (e.dead || e.air) continue
+        if (e.dead || e.air || e.carriedBy) continue
         const d = e.isB ? this.distPt(e, s.x1, s.y1) : Math.hypot(e.x - s.x1, e.y - s.y1)
         if (d > s.splash) continue
-        this.damage(e, s.dmg * (1 - (d / s.splash) * 0.6), s.cls, s.owner)
+        this.damage(e, s.dmg * (1 - (d / s.splash) * 0.6), s.cls, s.owner, s.src)
       }
-      this.addFx('exp', s.x1, s.y1, 2, 0, 0, 0, 0.6, big ? 1 : 0)
-      if (big) {
-        this.stamps.push({ kind: 'scorch', size: 0, x: s.x1, y: s.y1 })
-        for (let k = 0; k < 4; k++) this.addFx('debris', s.x1, s.y1, 2, (this.rand() - 0.5) * 2, (this.rand() - 0.5) * 2, 20 + this.rand() * 20, 0.8, 1)
+      const shipHit = this.ents.some((e) => e.naval && !e.dead && Math.hypot(e.x - s.x1, e.y - s.y1) < e.radius + 0.3)
+      if (water && !shipHit) this.addFx('splash', s.x1, s.y1, 0, 0, 0, 0, 0.9, big ? 2 : 1)
+      else {
+        this.addFx('exp', s.x1, s.y1, 2, 0, 0, 0, 0.6, big ? 1 : 0)
+        if (big && !water) {
+          this.stamps.push({ kind: 'scorch', size: 0, x: s.x1, y: s.y1 })
+          for (let k = 0; k < 4; k++) this.addFx('debris', s.x1, s.y1, 2, (this.rand() - 0.5) * 2, (this.rand() - 0.5) * 2, 20 + this.rand() * 20, 0.8, 1)
+        }
       }
       this.onSound('boom', s.x1, s.y1)
       return
     }
     const t = s.target
     if (t && !t.dead) {
-      this.damage(t, s.dmg, s.cls, s.owner)
+      this.damage(t, s.dmg, s.cls, s.owner, s.src)
       if (s.kind === 'shell' || s.kind === 'rocket') {
         this.addFx('exp', s.x1, s.y1, s.z1, 0, 0, 0, 0.4, 0)
         this.onSound('hit', s.x1, s.y1)
       } else this.addFx('spark', s.x1, s.y1, s.z1, 0, 0, 6, 0.25, 1)
+    } else if (water) {
+      this.addFx('splash', s.x1, s.y1, 0, 0, 0, 0, 0.6, 0)
     } else {
       this.addFx(s.kind === 'shell' || s.kind === 'rocket' ? 'exp' : 'dust', s.x1, s.y1, 1, 0, 0, 3, 0.4, s.kind === 'shell' || s.kind === 'rocket' ? 0 : 2)
     }
@@ -1272,22 +1834,24 @@ export class Game {
     return Math.hypot(dx, dy)
   }
 
-  damage(e: Ent, dmg: number, cls: WClass, from: number) {
-    if (e.dead || e.owner === from) return
+  damage(e: Ent, dmg: number, cls: WClass, from: number, src = 0) {
+    if (e.dead || e.owner === from || e.carriedBy) return
     const armor = e.isB ? 'bld' : e.u!.armor
-    const d = dmg * VS[cls][armor] * (0.9 + this.rand() * 0.2)
+    const d = dmg * VS[cls][armor] * (0.9 + this.rand() * 0.2) * (1 - 0.07 * e.rank)
     e.hp -= d
     e.lastHit = this.time
+    e.flashT = this.time
     // under fire: those near it come to help
     if (e.owner === 0 && this.time - this.alertT > 20) {
       this.alertT = this.time
       this.msg(e.isB ? 'Unsere Basis wird angegriffen!' : 'Unsere Einheiten werden angegriffen!', 'warn')
       this.onSound('alert', e.x, e.y)
     }
-    const attacker = this.nearestEnemyShooter(e, from)
+    const shooter = this.byId.get(src)
+    const attacker = shooter && !shooter.dead ? shooter : this.nearestEnemyShooter(e, from)
     if (attacker) e.lastAttacker = attacker
     if (!e.isB && e.order === 'idle' && !e.target && attacker && e.weapon && this.canHit(e, attacker)) e.target = attacker
-    if (e.hp <= 0) this.kill(e, from)
+    if (e.hp <= 0) this.kill(e, from, src)
   }
 
   private nearestEnemyShooter(e: Ent, from: number): Ent | null {
@@ -1304,10 +1868,22 @@ export class Game {
     return best
   }
 
-  kill(e: Ent, by: number) {
+  kill(e: Ent, by: number, src = 0) {
     if (e.dead) return
     this.players[e.owner].stats.lost++
     if (by >= 0) this.players[by].stats.killed++
+    // the shooter earns its stripes
+    const killer = this.byId.get(src)
+    if (killer && !killer.dead && !killer.isB) {
+      killer.kills++
+      const rank = RANKS.filter((k) => killer.kills >= k).length
+      if (rank > killer.rank) {
+        killer.rank = rank
+        killer.hp = Math.min(killer.maxHp, killer.hp + killer.maxHp * 0.25)
+        if (killer.owner === 0) this.msg(`${killer.u!.name} befördert: ${RANK_NAME[rank]}`, 'good')
+        this.onSound('promote', killer.x, killer.y)
+      }
+    }
     if (e.isB) {
       this.removeBuilding(e, true)
       return
@@ -1315,15 +1891,28 @@ export class Game {
     e.dead = true
     e.selected = false
     this.byId.delete(e.id)
+    // whoever was aboard goes down with the ship
+    for (const p of e.passengers) {
+      p.dead = true
+      this.byId.delete(p.id)
+      this.players[p.owner].stats.lost++
+    }
+    e.passengers = []
     if (e.u!.infantry) {
       this.addFx('dust', e.x, e.y, 2, 0, 0, 2, 0.6, 2)
       this.onSound('scream', e.x, e.y)
       return
     }
-    this.addFx('exp', e.x, e.y, e.air ? e.z : 4, 0, 0, 0, 0.75, 1)
-    for (let k = 0; k < 6; k++) this.addFx('debris', e.x, e.y, e.z + 4, (this.rand() - 0.5) * 3, (this.rand() - 0.5) * 3, 25 + this.rand() * 25, 1, 1)
-    this.stamps.push({ kind: 'scorch', size: 1, x: e.x, y: e.y })
-    this.wrecks.push({ key: e.key, owner: e.owner, x: e.x, y: e.y, dir: e.dir, tdir: e.tdir, t: 0, air: e.air })
+    const z = e.air ? e.z : e.naval ? 6 : 4
+    this.addFx('exp', e.x, e.y, z, 0, 0, 0, 0.75, e.naval && e.radius > 0.7 ? 2 : 1)
+    for (let k = 0; k < 6; k++) this.addFx('debris', e.x, e.y, z + 4, (this.rand() - 0.5) * 3, (this.rand() - 0.5) * 3, 25 + this.rand() * 25, 1, 1)
+    const water = this.wet(e.x, e.y)
+    if (e.jet || (e.air && water)) {
+      if (water) this.addFx('splash', e.x, e.y, 0, 0, 0, 0, 1, 2)
+    } else {
+      if (!e.naval && !water) this.stamps.push({ kind: 'scorch', size: 1, x: e.x, y: e.y })
+      this.wrecks.push({ key: e.key, owner: e.owner, x: e.x, y: e.y, dir: e.dir, tdir: e.tdir, t: 0, air: e.air, naval: e.naval })
+    }
     this.onSound('explode', e.x, e.y)
   }
 
@@ -1390,7 +1979,7 @@ export class Game {
     }
     for (let i = 0; i < fog.length; i++) if (fog[i] === 2) fog[i] = 1
     for (const e of this.ents) {
-      if (e.owner !== 0 || e.dead) continue
+      if (e.owner !== 0 || e.dead || e.carriedBy) continue
       const r = e.sight + (e.isB ? e.radius : 0)
       const cx = e.x, cy = e.y
       const r2 = r * r

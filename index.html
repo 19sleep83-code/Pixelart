@@ -6,96 +6,139 @@
     <title>Pixelfront</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <canvas id="backdrop"></canvas>
     <div id="app" class="hidden">
       <div id="view-wrap">
         <canvas id="view"></canvas>
         <div id="vignette"></div>
         <div id="topbar">
           <button id="menu-btn" title="Pause und Menü (P)">❚❚ Menü</button>
-          <span id="clock">0:00</span>
+          <span class="plate" id="clock">0:00</span>
+          <span class="plate" id="count">Einheiten 0</span>
         </div>
-        <div id="msgs"></div>
+        <div id="radio"></div>
       </div>
       <aside id="side">
+        <div class="rivets"></div>
+        <header id="hq-plate">
+          <span class="stencil">Gefechtsstand</span>
+          <span id="side-name" class="side-chip"></span>
+        </header>
         <div id="res">
-          <div class="money"><span class="lbl">Rohstoffe</span><span id="credits">0</span></div>
+          <div class="money">
+            <span class="stencil lbl">Rohstoffe</span>
+            <span id="credits" class="led">0</span>
+          </div>
           <div class="power">
-            <span class="lbl">Strom</span>
+            <span class="stencil lbl">Strom</span>
             <div id="powerbar"><div id="powerfill"></div><div id="poweruse"></div></div>
             <span id="powertext">0/0</span>
           </div>
         </div>
-        <canvas id="mini" width="256" height="128"></canvas>
+        <div id="map-frame">
+          <span class="stencil frame-label">Lagekarte</span>
+          <canvas id="mini" width="256" height="128"></canvas>
+        </div>
         <div id="tabs">
-          <button data-tab="build">Bau</button>
-          <button data-tab="inf">Infanterie</button>
-          <button data-tab="veh">Fahrzeuge</button>
-          <button data-tab="air">Luft</button>
+          <button data-tab="build"><span>Bau</span><kbd>F1</kbd></button>
+          <button data-tab="inf"><span>Inf.</span><kbd>F2</kbd></button>
+          <button data-tab="veh"><span>Fahrz.</span><kbd>F3</kbd></button>
+          <button data-tab="air"><span>Luft</span><kbd>F4</kbd></button>
+          <button data-tab="sea"><span>See</span><kbd>F5</kbd></button>
         </div>
         <div id="grid"></div>
-        <div id="tip"></div>
         <div id="sel"></div>
       </aside>
+      <div id="tip"></div>
     </div>
 
     <div id="screen">
-      <div id="menu" class="panel">
-        <h1>PIXELFRONT</h1>
-        <p class="sub">Echtzeit-Strategie in Mitteleuropa · mit Maus und Tastatur</p>
+      <div id="title-wrap">
+        <canvas id="logo"></canvas>
+        <p class="sub">Echtzeit-Strategie in Mitteleuropa</p>
+      </div>
+      <div id="menu" class="panel hidden">
         <div class="row">
-          <span class="lbl">Seite</span>
+          <span class="lbl stencil">Seite</span>
           <div class="seg" id="opt-faction">
-            <button data-v="nato" class="on"><i class="chip nato"></i>NATO</button>
+            <button data-v="nato"><i class="chip nato"></i>NATO</button>
             <button data-v="ru"><i class="chip ru"></i>Russland</button>
           </div>
         </div>
         <div class="row">
-          <span class="lbl">Gegner</span>
+          <span class="lbl stencil">Gegner</span>
           <div class="seg" id="opt-diff">
             <button data-v="0">Leicht</button>
-            <button data-v="1" class="on">Normal</button>
+            <button data-v="1">Normal</button>
             <button data-v="2">Schwer</button>
           </div>
         </div>
         <div class="row">
-          <span class="lbl">Karte</span>
-          <input id="opt-seed" type="number" min="1" max="99999" />
+          <span class="lbl stencil">Gelände</span>
+          <div class="seg" id="opt-map">
+            <button data-v="land" title="Felder, Wälder, ein Fluss. Keine Marine.">Binnenland</button>
+            <button data-v="coast" title="Ein Meer im Norden, beide Basen nahe der Küste.">Küste</button>
+            <button data-v="lakes" title="Ein großer See in der Mitte mit Armen zu beiden Basen.">Seenplatte</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lbl stencil">Tageszeit</span>
+          <div class="seg" id="opt-tod">
+            <button data-v="day">Tag</button>
+            <button data-v="dusk">Abend</button>
+            <button data-v="night">Nacht</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lbl stencil">Wetter</span>
+          <div class="seg" id="opt-weather">
+            <button data-v="clear">Klar</button>
+            <button data-v="clouds">Bewölkt</button>
+            <button data-v="rain">Regen</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lbl stencil">Karte</span>
+          <input id="opt-seed" type="number" min="1" max="99999" aria-label="Kartennummer" />
           <button id="opt-rand" class="small">Zufall</button>
         </div>
         <button id="start" class="big">Gefecht starten</button>
         <details>
-          <summary>Steuerung und Spielablauf</summary>
+          <summary>Steuerung</summary>
           <ul class="help">
-            <li><b>Linksklick / Rahmen ziehen</b> – Einheiten auswählen (Umschalt: hinzufügen, Doppelklick: alle gleichen im Bild)</li>
-            <li><b>Rechtsklick</b> – bewegen, angreifen, Erz abbauen (mit Erzlaster), Sammelpunkt setzen (mit Gebäude)</li>
+            <li><b>Linksklick / Rahmen ziehen</b> – auswählen (Umschalt: hinzufügen, Doppelklick: alle gleichen im Bild)</li>
+            <li><b>Rechtsklick</b> – bewegen, angreifen, Erz abbauen, Sammelpunkt setzen</li>
+            <li><b>Rechtsklick aufs eigene Landungsschiff</b> – einsteigen · Schiff auf Land schicken: anlanden · <b>D</b> – hier entladen</li>
+            <li><b>Jets</b>: Rechtsklick auf ein Ziel oder einen Punkt fliegt einen Luftschlag, danach zurück zum Aufmunitionieren</li>
             <li><b>A</b> + Linksklick – Angriffsbewegung · <b>S</b> – Stopp</li>
+            <li><b>F1–F5</b> – Baureiter · <b>Y X C V B N M , . -</b> – Felder im Baumenü</li>
             <li><b>Strg + 1–9</b> – Gruppe bilden · <b>1–9</b> – Gruppe wählen (zweimal: hinspringen)</li>
-            <li><b>Q</b> – ganze Armee · <b>E</b> – Kampfeinheiten im Bild · <b>Leertaste</b> – zur Auswahl · <b>H</b> – zum Hauptquartier</li>
-            <li><b>Pfeiltasten / Bildschirmrand / mittlere Maustaste</b> – Ansicht verschieben · <b>Mausrad</b> – Zoom</li>
-            <li><b>P</b> – Pause</li>
+            <li><b>Q</b> – ganze Armee · <b>E</b> – Kampfeinheiten im Bild · <b>Leertaste</b> – zur Auswahl · <b>H</b> – Hauptquartier</li>
+            <li><b>Pfeiltasten, Bildschirmrand, mittlere Maustaste</b> – Ansicht · <b>Mausrad</b> – Zoom · <b>P</b> – Pause</li>
           </ul>
-          <p class="note">Baue ein Kraftwerk und ein Rohstoffdepot. Erzlaster bringen Erz ins Depot, das wird zu Rohstoffen. Gebäude werden im Reiter „Bau“ gebaut und danach mit einem Klick platziert. Zerstöre alle Gebäude des Gegners.</p>
         </details>
       </div>
 
       <div id="loading" class="panel hidden">
-        <h2>Lade Gefecht …</h2>
+        <span class="stencil">Lagebesprechung</span>
         <div class="bar"><div id="load-fill"></div></div>
         <p id="load-what"></p>
+        <p id="load-tip" class="tip"></p>
       </div>
 
       <div id="pause" class="panel hidden">
-        <h2>Pause</h2>
+        <h2 class="stencil">Pause</h2>
         <button id="resume" class="big">Weiter</button>
+        <label class="check"><input type="checkbox" id="opt-grain" /> Filmkorn</label>
         <button id="restart">Neues Gefecht, gleiche Einstellungen</button>
         <button id="quit">Zum Hauptmenü</button>
       </div>
 
       <div id="end" class="panel hidden">
-        <h2 id="end-title">Sieg</h2>
+        <h2 id="end-title" class="stencil">Sieg</h2>
         <div id="end-stats"></div>
         <button id="again" class="big">Nochmal</button>
         <button id="end-menu">Zum Hauptmenü</button>

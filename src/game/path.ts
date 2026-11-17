@@ -60,7 +60,10 @@ export class PathFinder {
   closed: Uint32Array
   run = 1
   heap = new Heap()
-  constructor(public map: GameMap) {
+  /** which tiles this finder may use: ground units by default, boats with `navI` */
+  pass: (i: number) => boolean
+  constructor(public map: GameMap, pass?: (i: number) => boolean) {
+    this.pass = pass ?? ((i) => map.walkI(i))
     const n = map.N * map.N
     this.g = new Float32Array(n)
     this.came = new Int32Array(n)
@@ -68,18 +71,23 @@ export class PathFinder {
     this.closed = new Uint32Array(n)
   }
 
-  /** the nearest tile a ground unit can stand on */
+  ok(x: number, y: number): boolean {
+    const N = this.map.N
+    return x >= 0 && y >= 0 && x < N && y < N && this.pass(y * N + x)
+  }
+
+  /** the nearest tile a unit of this kind can stand on */
   nearestWalkable(x: number, y: number, maxR = 12): { x: number; y: number } | null {
     const m = this.map
     const tx = Math.floor(x), ty = Math.floor(y)
-    if (m.walk(tx, ty)) return { x: tx, y: ty }
+    if (this.ok(tx, ty)) return { x: tx, y: ty }
     for (let r = 1; r <= maxR; r++) {
       let best: { x: number; y: number } | null = null
       let bd = 1e9
       for (let dy = -r; dy <= r; dy++)
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
-          if (!m.walk(tx + dx, ty + dy)) continue
+          if (!this.ok(tx + dx, ty + dy)) continue
           const d = Math.hypot(tx + dx + 0.5 - x, ty + dy + 0.5 - y)
           if (d < bd) {
             bd = d
@@ -100,7 +108,7 @@ export class PathFinder {
     const N = m.N
     const start = m.idx(sx, sy)
     let goal = m.idx(gx, gy)
-    if (!m.walkI(goal)) {
+    if (!this.pass(goal)) {
       const w = this.nearestWalkable(gx + 0.5, gy + 0.5)
       if (!w) return []
       gx = w.x
@@ -144,8 +152,8 @@ export class PathFinder {
           const nx = cx + dx, ny = cy + dy
           if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue
           const ni = ny * N + nx
-          if (!m.walkI(ni)) continue
-          if (dx && dy && (!m.walkI(cy * N + nx) || !m.walkI(ny * N + cx))) continue
+          if (!this.pass(ni)) continue
+          if (dx && dy && (!this.pass(cy * N + nx) || !this.pass(ny * N + cx))) continue
           const t = m.ter[ni]
           const step = (dx && dy ? 1.4142 : 1) * (t === Ter.Road || t === Ter.Bridge ? 0.75 : 1)
           const ng = g[cur] + step
@@ -175,8 +183,8 @@ export class PathFinder {
     for (let k = 1; k <= n; k++) {
       const t = k / n
       const x = ax + (bx - ax) * t, y = ay + (by - ay) * t
-      if (!m.walk(Math.floor(x + px * half), Math.floor(y + py * half))) return false
-      if (!m.walk(Math.floor(x - px * half), Math.floor(y - py * half))) return false
+      if (!this.ok(Math.floor(x + px * half), Math.floor(y + py * half))) return false
+      if (!this.ok(Math.floor(x - px * half), Math.floor(y - py * half))) return false
     }
     return true
   }

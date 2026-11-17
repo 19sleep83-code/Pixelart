@@ -13,6 +13,7 @@ import { makeCanvas, type Sprite } from '../core/voxel'
 import { Ter } from './map'
 import { hash2 } from '../core/rng'
 import { HARVEST_LOAD } from './defs'
+import { Atmos, type Light } from './atmos'
 
 interface Drawable {
   k: number
@@ -36,6 +37,9 @@ export class Renderer {
   fogImg: ImageData
   private rings = new Map<string, HTMLCanvasElement>()
   private shake = 0
+  atmos: Atmos
+  /** film grain strength (0 = off) */
+  grain = 0.05
 
   constructor(public game: Game, public A: Assets, public terrain: Terrain, public cv: HTMLCanvasElement) {
     this.ctx = cv.getContext('2d')!
@@ -43,6 +47,7 @@ export class Renderer {
     this.fogCv = makeCanvas(N, N)
     this.fogCtx = this.fogCv.getContext('2d')!
     this.fogImg = this.fogCtx.createImageData(N, N)
+    this.atmos = new Atmos(game.map, game.opts.tod, game.opts.weather)
   }
 
   resize(w: number, h: number) {
@@ -103,8 +108,9 @@ export class Renderer {
         }
       } else {
         const s = this.toScreen(e.x, e.y, e.z)
-        const r = e.u!.infantry ? 5 : 9
-        const cy = s.y - (e.u!.infantry ? 5 : 4)
+        if (e.carriedBy) continue
+        const r = e.u!.infantry ? 5 : e.naval ? (e.radius > 0.7 ? 20 : 13) : 9
+        const cy = s.y - (e.u!.infantry ? 5 : e.naval ? 6 : 4)
         if (Math.abs(px - s.x) <= r && Math.abs(py - cy) <= r) {
           const k = e.x + e.y + (e.air ? 100 : 0)
           if (k > bk) {
@@ -120,7 +126,9 @@ export class Renderer {
   /** is an entity of another player drawn */
   shown(e: Ent): boolean {
     const g = this.game
+    if (e.carriedBy) return false
     if (e.owner === 0) return true
+    if (e.hidden && !g.visibleTo(0, e)) return false
     const N = g.map.N
     if (e.isB) {
       for (let y = e.ty; y < e.ty + e.h; y++) for (let x = e.tx; x < e.tx + e.w; x++) if (g.fog[y * N + x]) return true
@@ -158,7 +166,7 @@ export class Renderer {
     this.ctx.drawImage(sp.cv, x - sp.ax, y - sp.ay)
   }
 
-  draw(o: Overlay) {
+  draw(o: Overlay, dt = 1 / 60) {
     const g = this.game
     const A = this.A
     const ctx = this.ctx
@@ -202,6 +210,8 @@ export class Renderer {
       const s = scr(x, y)
       return s.x > -m && s.x < this.W + m && s.y > -m && s.y < this.H + m * 1.5
     }
+    const atm = this.atmos
+    atm.water(ctx, camX, camY, g.time, tx0, ty0, tx1, ty1)
 
     // shadows
     for (const e of g.ents) {
@@ -216,7 +226,7 @@ export class Renderer {
         const art = A.units[f][e.key]
         const sh = art.hull.shadowAt(e.dir)
         if (e.air) {
-          const k = e.z * 0.85
+          const k = e.z * 0.85 * (e.jet ? 0.7 : 1)
           const s = scr(e.x + k * 0.035, e.y + k * 0.016)
           ctx.globalAlpha = 0.7
           this.drawSprite(sh, s.x, s.y)
@@ -230,7 +240,7 @@ export class Renderer {
 
     // markers on the ground: selection rings, building outlines, rally points
     for (const e of g.ents) {
-      if (e.dead || !onScreen(e.x, e.y)) continue
+      if (e.dead || e.carriedBy || !onScreen(e.x, e.y)) continue
       const hover = o.hoverEnt === e
       if (!e.selected && !hover) continue
       if (e.owner !== 0 && !this.shown(e)) continue
@@ -238,7 +248,7 @@ export class Renderer {
       if (e.isB) continue
       {
         const s = scr(e.x, e.y)
-        const r = e.u!.infantry ? 4 : Math.round(e.u!.radius * 22)
+        const r = e.u!.infantry ? 4 : Math.round(e.u!.radius * (e.naval ? 26 : 22))
         ctx.globalAlpha = e.selected ? 1 : 0.55
         ctx.drawImage(this.ring(r, col), s.x - r - 1, s.y - Math.floor(r / 2) - 1)
         ctx.globalAlpha = 1
@@ -268,12 +278,25 @@ export class Renderer {
       if (!onScreen(w.x, w.y) || g.fog[Math.floor(w.y) * N + Math.floor(w.x)] === 0) continue
       const art = A.units[g.players[w.owner].faction][w.key]
       if (!art.wreck) continue
-      const fade = w.t > 34 ? 1 - (w.t - 34) / 6 : 1
+      const fade = w.naval ? Math.max(0, 1 - w.t / 9) : w.t > 34 ? 1 - (w.t - 34) / 6 : 1
       list.push({
         k: w.x + w.y,
         f: () => {
           const p = scr(w.x, w.y)
           ctx.globalAlpha = fade
+          if (w.naval) {
+            // going down: only what is still above the water shows
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(0, 0, this.W, p.y + 3)
+            ctx.clip()
+            const sink = Math.round(w.t * w.t * 0.35)
+            const tilt = Math.min(0.6, w.t * 0.08)
+            this.drawSprite(art.wreck!.at(w.dir + tilt), p.x, p.y + sink)
+            ctx.restore()
+            ctx.globalAlpha = 1
+            return
+          }
           this.drawSprite(art.wreck!.at(w.dir), p.x, p.y)
           if (art.wreckTurret) {
             const [dx, dy] = mountOffset(art.mount, w.dir)
@@ -286,16 +309,19 @@ export class Renderer {
     const airList: Ent[] = []
     for (const e of g.ents) {
       if (e.dead || !onScreen(e.x, e.y, 90) || !this.shown(e)) continue
-      if (e.air) {
+      if (e.air && e.z > 3) {
         airList.push(e)
         continue
       }
-      list.push({ k: e.x + e.y, f: () => this.drawEnt(e, scr) })
+      list.push({ k: e.x + e.y + (e.air ? 0.3 : 0), f: () => this.drawEnt(e, scr) })
     }
     list.sort((a, b) => a.k - b.k)
     for (const d of list) d.f()
-    airList.sort((a, b) => a.x + a.y - b.x - b.y)
+    airList.sort((a, b) => a.z - b.z || a.x + a.y - b.x - b.y)
     for (const e of airList) this.drawEnt(e, scr)
+
+    // cloud shadows drift over everything on the ground
+    atm.clouds(ctx, camX, camY, this.W, this.H, g.time)
 
     // selected buildings get corner brackets on top
     for (const e of g.ents) {
@@ -304,6 +330,70 @@ export class Renderer {
       const col = e.owner === 0 ? 0x7dff6a : 0xff5a4a
       this.footprint(scr, e.tx, e.ty, e.w, e.h, col, e.selected ? 0.9 : 0.5)
     }
+
+    // smoke, dust and water: lit like the ground around them
+    for (const f of g.fx) {
+      if (f.t < 0 || !this.visiblePt(f.x, f.y)) continue
+      const q = scr(f.x, f.y, f.z)
+      const k = f.t / f.life
+      switch (f.kind) {
+        case 'smoke':
+        case 'dust': {
+          const r = Math.min(8, Math.round(f.size + k * 3) - 1)
+          const sp = (f.kind === 'dust' ? A.dust : A.smoke)[Math.max(0, r)]
+          ctx.globalAlpha = (1 - k) * (f.kind === 'dust' ? 0.5 : 0.7)
+          this.drawSprite(sp, q.x, q.y)
+          ctx.globalAlpha = 1
+          break
+        }
+        case 'debris':
+          ctx.fillStyle = k < 0.3 ? '#ffb050' : '#2a2622'
+          ctx.fillRect(q.x, q.y, 2, 1)
+          break
+        case 'wake': {
+          // foam spreading behind a boat
+          const r = Math.round(f.size * (0.6 + k * 1.4))
+          ctx.globalAlpha = (1 - k) * 0.75
+          ctx.fillStyle = '#eef6f6'
+          ctx.fillRect(q.x - r, q.y, r * 2 + 1, 1)
+          if (r > 1) {
+            ctx.fillRect(q.x - r + 1, q.y - 1, 1, 1)
+            ctx.fillRect(q.x + r - 1, q.y + 1, 1, 1)
+          }
+          ctx.globalAlpha = 1
+          break
+        }
+        case 'splash': {
+          // a column of water and its ring
+          const h = Math.round(Math.sin(Math.min(1, k * 1.4) * Math.PI) * (6 + f.size * 6))
+          const w = 1 + f.size
+          ctx.globalAlpha = 1 - k * 0.7
+          ctx.fillStyle = '#e8f2f6'
+          ctx.fillRect(q.x - w, q.y - h, w * 2, h)
+          ctx.fillStyle = '#b8d4e0'
+          ctx.fillRect(q.x - w, q.y - h, 1, h)
+          const rr = Math.round(2 + k * (5 + f.size * 3))
+          ctx.drawImage(this.ring(rr, 0xd8eef4), q.x - rr - 1, q.y - Math.floor(rr / 2) - 1)
+          ctx.globalAlpha = 1
+          break
+        }
+      }
+    }
+
+    // the hour of the day and the weather, then whatever glows
+    atm.grade(ctx, this.W, this.H)
+    const level = atm.lightLevel
+    const lights: Light[] = []
+    if (level > 0) this.collectLights(lights, level, scr, onScreen, tx0, ty0, tx1, ty1)
+    for (const f of g.fx) {
+      if (f.t < 0 || !this.visiblePt(f.x, f.y)) continue
+      const q = scr(f.x, f.y, f.z)
+      const k = f.t / f.life
+      if (f.kind === 'exp') lights.push({ x: q.x, y: q.y - 4, r: 18 + f.size * 12, color: 'rgba(255,170,80,0.9)', a: (1 - k) * (0.45 + level * 0.5) })
+      else if (f.kind === 'fire') lights.push({ x: q.x, y: q.y - 3, r: 12, color: 'rgba(255,140,50,0.8)', a: 0.25 + level * 0.6 })
+      else if (f.kind === 'flash') lights.push({ x: q.x, y: q.y, r: 6 + f.size * 3, color: 'rgba(255,230,160,0.9)', a: 0.4 + level * 0.6 })
+    }
+    atm.lights(ctx, lights, (r, c) => A.glowOf(r, c))
 
     // shells and rockets
     for (const s of g.shots) {
@@ -329,6 +419,21 @@ export class Renderer {
           ctx.fillStyle = '#ffd060'
           ctx.fillRect(q.x, q.y, 1, 1)
           break
+        case 'missile': {
+          ctx.fillStyle = '#d8dcd8'
+          ctx.fillRect(q.x - 1, q.y - 1, 3, 2)
+          ctx.fillStyle = '#ffe080'
+          ctx.fillRect(q.x, q.y, 1, 1)
+          break
+        }
+        case 'snipe': {
+          const prev = g.shotPos({ ...s, t: Math.max(0, s.t - 0.05) })
+          const r = scr(prev.x, prev.y, prev.z)
+          ctx.globalAlpha = 0.7
+          this.line(r.x, r.y, q.x, q.y, '#ffffff')
+          ctx.globalAlpha = 1
+          break
+        }
         case 'art': {
           const gq = scr(p.x, p.y)
           ctx.fillStyle = 'rgba(0,0,0,0.3)'
@@ -351,27 +456,8 @@ export class Renderer {
         case 'exp': {
           const frames = A.explosions[Math.min(2, f.size)]
           const fr = frames[Math.min(frames.length - 1, Math.floor(k * frames.length))]
-          if (k < 0.35) {
-            ctx.globalCompositeOperation = 'lighter'
-            ctx.globalAlpha = (0.35 - k) * 1.4
-            const glow = A.smoke[Math.min(8, 4 + f.size * 2)]
-            ctx.drawImage(glow.cv, q.x - glow.ax * 2, q.y - glow.ay * 2, glow.w * 2, glow.h * 2)
-            ctx.globalCompositeOperation = 'source-over'
-            ctx.globalAlpha = 1
-          }
           this.drawSprite(fr, q.x, q.y - fr.h / 3)
           if (f.t < 0.05 && f.size >= 1) this.addShake(f.size * 0.8)
-          break
-        }
-        case 'smoke':
-        case 'dust': {
-          const r = Math.min(8, Math.round(f.size + k * 3) - 1)
-          const sp = A.smoke[Math.max(0, r)]
-          ctx.globalAlpha = (1 - k) * (f.kind === 'dust' ? 0.45 : 0.7)
-          if (f.kind === 'dust') ctx.filter = 'sepia(0.6)'
-          this.drawSprite(sp, q.x, q.y)
-          ctx.filter = 'none'
-          ctx.globalAlpha = 1
           break
         }
         case 'fire': {
@@ -392,16 +478,14 @@ export class Renderer {
           ctx.fillRect(q.x + Math.round(Math.sin(f.t * 40) * 2), q.y - Math.round(k * 3), 1, 1)
           ctx.fillRect(q.x - Math.round(Math.cos(f.t * 37) * 2), q.y - Math.round(k * 2), 1, 1)
           break
-        case 'debris':
-          ctx.fillStyle = k < 0.3 ? '#ffb050' : '#2a2622'
-          ctx.fillRect(q.x, q.y, 2, 1)
-          break
       }
     }
 
+    atm.rain(ctx, this.W, this.H, dt, Math.random)
+
     // health bars
     for (const e of g.ents) {
-      if (e.dead || !onScreen(e.x, e.y)) continue
+      if (e.dead || e.carriedBy || !onScreen(e.x, e.y)) continue
       const show = e.selected || o.hoverEnt === e || (e.hp < e.maxHp && g.time - e.lastHit < 3)
       if (!show || !this.shown(e)) continue
       const k = Math.max(0, e.hp / e.maxHp)
@@ -414,14 +498,23 @@ export class Renderer {
         y = s.y - art.body.ay + 2
       } else {
         const s = scr(e.x, e.y, e.z)
-        w = e.u!.infantry ? 8 : 14
+        w = e.u!.infantry ? 8 : e.naval ? (e.radius > 0.7 ? 26 : 18) : 14
         x = s.x - w / 2
-        y = s.y - (e.u!.infantry ? 15 : e.air ? 22 : 16)
+        y = s.y - (e.u!.infantry ? 15 : e.air ? 22 : e.naval ? (e.radius > 0.7 ? 30 : 20) : 16)
       }
       ctx.fillStyle = '#0c0e0a'
       ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, 4)
       ctx.fillStyle = k > 0.6 ? '#5fd65a' : k > 0.3 ? '#e8c03a' : '#e2492f'
       ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w * k)), 2)
+      // rank stripes
+      if (e.rank > 0) this.chevrons(Math.round(x) + w + 2, Math.round(y) - 1, e.rank)
+      // a landing ship shows who is aboard
+      if (e.u?.transport && e.owner === 0) {
+        for (let i = 0; i < e.u.transport; i++) {
+          ctx.fillStyle = i < e.passengers.length ? '#e0b532' : '#0c0e0a'
+          ctx.fillRect(Math.round(x) + i * 3, Math.round(y) + 3, 2, 2)
+        }
+      }
       // a harvester shows its load
       if (e.u?.harvester && e.owner === 0) {
         ctx.fillStyle = '#0c0e0a'
@@ -446,6 +539,7 @@ export class Renderer {
     ctx.drawImage(this.fogCv, 0, 0)
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.imageSmoothingEnabled = false
+    atm.filmGrain(ctx, this.W, this.H, this.grain)
 
     // rally points of selected buildings
     for (const e of g.ents) {
@@ -521,18 +615,35 @@ export class Renderer {
     }
     const art = A.units[f][e.key]
     const s = scr(e.x, e.y, e.z)
+    const flash = g.time - e.flashT < 0.07
+    // a sniper in hiding is a ghost to its own side
+    if (e.hidden) ctx.globalAlpha = 0.45
     if (e.u!.infantry) {
       const fr = e.moving ? (Math.floor(e.anim * 7) % 2 ? art.alt! : art.alt2!) : art.hull
       this.drawSprite(fr.at(e.dir), s.x, s.y)
+      if (flash) this.flashSprite(fr.at(e.dir), s.x, s.y)
+      ctx.globalAlpha = 1
       return
     }
     const hull = e.u!.harvester && e.cargo > 0 && art.alt ? art.alt : art.hull
-    // a little bounce while driving
-    const bob = e.moving && !e.air && Math.floor(e.anim * 8) % 2 ? -1 : 0
+    // a little bounce while driving, a slow roll on the water
+    const bob = e.naval ? Math.round(Math.sin(g.time * 1.4 + e.id) * 0.7) : e.moving && !e.air && Math.floor(e.anim * 8) % 2 ? -1 : 0
     this.drawSprite(hull.at(e.dir), s.x, s.y + bob)
+    if (flash) this.flashSprite(hull.at(e.dir), s.x, s.y + bob)
     if (art.turret) {
       const [dx, dy] = mountOffset(art.mount, e.dir)
       this.drawSprite(art.turret.at(e.tdir), s.x + dx, s.y + dy + bob)
+      if (flash) this.flashSprite(art.turret.at(e.tdir), s.x + dx, s.y + dy + bob)
+    }
+    ctx.globalAlpha = 1
+    if (e.jet && e.js !== 'park' && e.z > 3) {
+      // afterburner
+      const tx = -Math.cos(e.dir) * 0.55, ty = -Math.sin(e.dir) * 0.55
+      const q = scr(e.x + tx, e.y + ty, e.z + 2)
+      ctx.fillStyle = '#ff8a30'
+      ctx.fillRect(q.x - 1, q.y - 1, 3, 2)
+      ctx.fillStyle = '#fff2b0'
+      ctx.fillRect(q.x, q.y - 1, 1, 1)
     }
     if (art.rotor) {
       // two blades turning fast, with a faint blur disc
@@ -552,6 +663,90 @@ export class Renderer {
         this.line(Math.round(cx - ex), Math.round(cy - ey), Math.round(cx + ex), Math.round(cy + ey), '#2a2c28')
       }
     }
+  }
+
+  /** the white blink of a hit */
+  private flashSprite(sp: Sprite, x: number, y: number) {
+    const ctx = this.ctx
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = 0.55
+    this.drawSprite(sp, x, y)
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+  }
+
+  /** rank stripes: one or two chevrons, a star for a veteran */
+  private chevrons(x: number, y: number, rank: number) {
+    const ctx = this.ctx
+    ctx.fillStyle = '#0c0e0a'
+    ctx.fillRect(x - 1, y - 1, 7, rank >= 3 ? 7 : rank * 3 + 1)
+    ctx.fillStyle = '#f0c840'
+    if (rank >= 3) {
+      ctx.fillRect(x + 2, y, 1, 5)
+      ctx.fillRect(x, y + 2, 5, 1)
+      ctx.fillRect(x + 1, y + 1, 3, 3)
+      return
+    }
+    for (let k = 0; k < rank; k++) {
+      const yy = y + k * 3
+      ctx.fillRect(x, yy, 1, 1)
+      ctx.fillRect(x + 1, yy + 1, 1, 1)
+      ctx.fillRect(x + 2, yy + 2 - 1, 1, 1)
+      ctx.fillRect(x + 3, yy + 1, 1, 1)
+      ctx.fillRect(x + 4, yy, 1, 1)
+    }
+  }
+
+  /** what shines in the dark: windows, headlights, navigation lights */
+  private collectLights(out: Light[], level: number, scr: (x: number, y: number, z?: number) => { x: number; y: number }, onScreen: (x: number, y: number, m?: number) => boolean, tx0: number, ty0: number, tx1: number, ty1: number) {
+    const g = this.game
+    const N = g.map.N
+    const blink = Math.floor(g.time * 1.5) % 2 === 0
+    for (const e of g.ents) {
+      if (e.dead || e.carriedBy || !onScreen(e.x, e.y) || !this.shown(e)) continue
+      if (e.isB) {
+        if (e.built < 1) continue
+        const n = Math.min(2, e.w + e.h - 2)
+        for (let k = 0; k < n; k++) {
+          const q = scr(e.tx + 0.3 + hash2(e.id, k, 1) * (e.w - 0.6), e.ty + 0.3 + hash2(e.id, k, 2) * (e.h - 0.6), 6 + hash2(e.id, k, 3) * 6)
+          out.push({ x: q.x, y: q.y, r: 8, color: 'rgba(255,214,140,0.85)', a: level * 0.75 })
+        }
+        if (blink) {
+          const q = scr(e.x, e.y, 16 + e.w * 3)
+          out.push({ x: q.x, y: q.y, r: 4, color: e.owner === 0 ? 'rgba(120,255,120,1)' : 'rgba(255,90,70,1)', a: level })
+        }
+        continue
+      }
+      if (e.u!.infantry) continue
+      if (e.air) {
+        const q = scr(e.x, e.y, e.z)
+        if (blink) out.push({ x: q.x, y: q.y, r: 4, color: 'rgba(255,70,60,1)', a: level })
+        continue
+      }
+      if (e.naval) {
+        const q = scr(e.x, e.y, 8)
+        out.push({ x: q.x, y: q.y, r: 10 + e.radius * 8, color: 'rgba(255,220,150,0.8)', a: level * 0.6 })
+        const l = scr(e.x - Math.sin(e.dir) * e.radius * 0.5, e.y + Math.cos(e.dir) * e.radius * 0.5, 6)
+        const r = scr(e.x + Math.sin(e.dir) * e.radius * 0.5, e.y - Math.cos(e.dir) * e.radius * 0.5, 6)
+        out.push({ x: l.x, y: l.y, r: 3, color: 'rgba(80,255,120,1)', a: level }, { x: r.x, y: r.y, r: 3, color: 'rgba(255,60,60,1)', a: level })
+        continue
+      }
+      // headlights on the ground ahead
+      const q = scr(e.x + Math.cos(e.dir) * 0.8, e.y + Math.sin(e.dir) * 0.8, 1)
+      out.push({ x: q.x, y: q.y, r: 10, color: 'rgba(255,245,210,0.8)', a: level * 0.7 })
+    }
+    // windows in the villages
+    for (let ty = ty0; ty <= ty1; ty++)
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const i = ty * N + tx
+        const st = g.fog[i] ? g.map.tileStatics[i] : undefined
+        if (!st) continue
+        for (const s of st) {
+          if (s.kind === 'oak' || s.kind === 'pine' || s.kind === 'birch' || s.kind === 'barn') continue
+          const q = scr(s.x + 0.2, s.y + 0.2, 4)
+          out.push({ x: q.x, y: q.y, r: 8, color: 'rgba(255,200,120,0.85)', a: level * 0.8 })
+        }
+      }
   }
 
   private line(x0: number, y0: number, x1: number, y1: number, col: string) {

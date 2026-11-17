@@ -1,13 +1,14 @@
 # Pixelfront
 
-Ein Echtzeit-Strategiespiel in isometrischer Pixel-Art: NATO gegen Russland auf einem
-zufällig erzeugten Schlachtfeld in Mitteleuropa, mit Basenbau, Erzabbau und Kampf.
+Ein Echtzeit-Strategiespiel in isometrischer Pixel-Art: NATO gegen Russland auf einem zufällig
+erzeugten Schlachtfeld in Mitteleuropa, mit Basenbau, Erzabbau, Landkrieg, Luftwaffe und Marine.
 
-Die Technik orientiert sich an Sprite-Stacking-Spielen wie fly.ui8.dev: Alle Einheiten, Gebäude,
-Bäume und Häuser sind **Voxel-Modelle, die im Code entstehen**. Beim Laden werden sie für jede
-Blickrichtung in kleine Pixel-Sprites gerendert, mit harter Beleuchtung in wenigen Tönen und
-Umrisslinien wie bei handgemachter Pixel-Art. Das Spiel zeichnet in einen niedrig aufgelösten
-Puffer und skaliert ihn mit harten Pixeln hoch. Es gibt keine Engine und keine Bilddateien.
+Die Technik orientiert sich an Sprite-Stacking-Spielen wie fly.ui8.dev: Alle Einheiten, Schiffe,
+Gebäude, Bäume, Häuser und sogar das Titel-Logo sind **Voxel-Modelle, die im Code entstehen**.
+Beim Laden werden sie für jede Blickrichtung in kleine Pixel-Sprites gerendert, mit harter
+Beleuchtung in wenigen Tönen und Umrisslinien wie bei handgemachter Pixel-Art. Das Spiel zeichnet
+in einen niedrig aufgelösten Puffer und skaliert ihn mit harten Pixeln hoch. Es gibt keine Engine
+und keine Bilddateien.
 
 ## Spielen
 
@@ -22,30 +23,58 @@ npm run dev
 Danach `http://localhost:5173` öffnen. `npm run build` erzeugt `dist/` (für GitHub Pages),
 `npm run build:single` eine einzelne, eigenständige `dist-single/index.html`.
 
+## Menü
+
+Hinter dem Menü läuft eine echte Schlacht zwischen zwei Computergegnern. Einstellbar sind:
+
+- **Seite:** NATO oder Russland
+- **Gegner:** Leicht, Normal, Schwer
+- **Gelände:**
+  - Binnenland: Fluss, keine Marine
+  - Küste: Meer im Norden
+  - Seenplatte: großer See mit Armen zu beiden Basen
+- **Tageszeit:** Tag, Abend, Nacht (mit Fenstern, Scheinwerfern und Positionslichtern)
+- **Wetter:** Klar, Bewölkt (Wolkenschatten), Regen (mit Blitzen)
+- **Karte:** eine Nummer, damit sich eine Karte wiederholen lässt
+
 ## Spielablauf
 
 - Du startest mit Hauptquartier, einem Schützenpanzer und drei Schützen.
-- **Bau**-Reiter: Gebäude bauen, wenn „Bereit“ erscheint, anklicken und auf der Karte platzieren
-  (nur in der Nähe eigener Gebäude).
-- **Kraftwerk** liefert Strom. Wird mehr Strom verbraucht als erzeugt, läuft die Produktion halb so schnell.
-- **Rohstoffdepot** bringt einen Erzlaster mit. Laster bauen Erz ab und liefern es als Rohstoffe ab.
-- Produktion wird bezahlt, während sie läuft. Ohne Rohstoffe stockt sie.
+- **Bau**-Reiter: Gebäude bauen. Wenn „Bereit“ erscheint, anklicken und auf der Karte platzieren.
+- **Kraftwerke** liefern Strom. Ohne genug Strom läuft die Produktion halb so schnell.
+- **Rohstoffdepots** bringen einen Erzlaster mit. Laster bauen Erz ab und liefern es als Rohstoffe ab.
+- Produktion wird bezahlt, während sie läuft.
+- **Ränge:** Einheiten mit 3, 7 und 12 Abschüssen steigen auf (Gefreiter, Feldwebel, Veteran). Sie
+  richten mehr Schaden an und halten mehr aus, Veteranen heilen sich selbst.
 - Sieg: Alle Gebäude des Gegners sind zerstört.
 
-| Gebäude | Kosten | Freischaltung |
-| --- | --- | --- |
-| Kraftwerk | 300 | – |
-| Rohstoffdepot | 1600 | Kraftwerk |
-| Kaserne | 400 | Kraftwerk |
-| Fahrzeugwerk | 1800 | Rohstoffdepot |
-| Radarstation | 900 | Fahrzeugwerk |
-| Hubschrauberplatz | 1200 | Radarstation |
-| MG-Bunker | 500 | Kaserne |
-| Raketenstellung | 750 | Fahrzeugwerk |
+### Gebäude
 
-Einheiten: Schütze, Panzerabwehr, Erzlaster, Schützenpanzer, Kampfpanzer, Flakpanzer,
-Panzerhaubitze (NATO) bzw. Raketenwerfer (Russland), Kampfhubschrauber. Die beiden Seiten
-unterscheiden sich in Aussehen und Werten (NATO: Reichweite und Präzision, Russland: Panzerung und Preis).
+| Gebäude | Kosten | Voraussetzung | Zweck |
+| --- | --- | --- | --- |
+| Kraftwerk | 300 | – | Strom |
+| Rohstoffdepot | 1600 | Kraftwerk | Erz annehmen, bringt Erzlaster mit |
+| Kaserne | 400 | Kraftwerk | Infanterie |
+| Fahrzeugwerk | 1800 | Rohstoffdepot | Fahrzeuge |
+| Radarstation | 900 | Fahrzeugwerk | schaltet schwere Einheiten frei |
+| Werft | 1200 | Rohstoffdepot | Schiffe; muss am Ufer stehen, darf weiter weg von der Basis sein |
+| Hubschrauberplatz | 1200 | Radarstation | Kampfhubschrauber |
+| Flugfeld | 1800 | Radarstation | Kampfjets, drei Stellplätze |
+| MG-Bunker | 500 | Kaserne | Abwehr gegen Infanterie |
+| Raketenstellung | 750 | Fahrzeugwerk | Abwehr gegen Panzer, Schiffe und Luft |
+
+### Einheiten
+
+| Reiter | Einheiten |
+| --- | --- |
+| Infanterie | Schütze, Panzerabwehr, Scharfschütze (unsichtbar, solange er stillhält) |
+| Fahrzeuge | Erzlaster, Spähwagen, Schützenpanzer, Kampfpanzer, Flakpanzer, Panzerhaubitze (NATO) bzw. Raketenwerfer (Russland) |
+| Luft | Kampfhubschrauber, Kampfjet (Luftschlag, danach zurück zum Aufmunitionieren) |
+| See | Patrouillenboot, Korvette, Zerstörer (NATO) bzw. Raketenkreuzer (Russland), Landungsschiff (5 Plätze), Flugzeugträger (3 eigene Jets) |
+
+Die beiden Seiten unterscheiden sich in Aussehen und Werten: NATO hat mehr Reichweite und
+Präzision, Russland mehr Panzerung und niedrigere Preise. Fährt die Maus über ein Feld im Baumenü, erscheint die
+vollständige Datenkarte mit Schaden, Reichweite, Panzerung und Zielen.
 
 ## Steuerung
 
@@ -53,14 +82,19 @@ unterscheiden sich in Aussehen und Werten (NATO: Reichweite und Präzision, Russ
 | --- | --- |
 | Linksklick / Rahmen ziehen | auswählen (Umschalt: hinzufügen, Doppelklick: alle gleichen im Bild) |
 | Rechtsklick | bewegen, angreifen, Erz abbauen, Sammelpunkt setzen |
+| Rechtsklick aufs eigene Landungsschiff | Bodentruppen steigen ein (das Schiff kommt ans Ufer) |
+| Landungsschiff auf Land schicken / D | Truppen dort anlanden / hier entladen |
+| Jets + Rechtsklick | Luftschlag auf ein Ziel oder einen Punkt |
 | A + Linksklick | Angriffsbewegung |
 | S | Stopp |
+| F1–F5, Tab | Baureiter wechseln |
+| Y X C V B N M , . - | Feld im Baumenü bauen / platzieren |
 | Strg + 1–9 / 1–9 | Gruppe bilden / wählen (zweimal: hinspringen) |
 | Q / E | ganze Armee / Kampfeinheiten im Bild |
 | Leertaste / H | zur Auswahl / zum Hauptquartier |
 | Pfeiltasten, Bildschirmrand, mittlere Maustaste | Ansicht verschieben |
 | Mausrad | Zoom |
-| P | Pause |
+| P | Pause (dort lässt sich das Filmkorn abschalten) |
 
 ## Aufbau des Codes
 
@@ -68,15 +102,16 @@ unterscheiden sich in Aussehen und Werten (NATO: Reichweite und Präzision, Russ
 | --- | --- |
 | `src/core/voxel.ts` | Voxel-Modelle und der Renderer, der daraus Sprites macht |
 | `src/core/iso.ts` | isometrische Projektion und Farbhilfen |
-| `src/game/models.ts` | alle Modelle: Fahrzeuge, Soldaten, Gebäude, Bäume, Häuser, Erz |
-| `src/game/map.ts` | Kartengenerator: Felder, Wälder, Fluss, Straßen, Brücken, Dörfer, Erz |
+| `src/game/models.ts` | alle Modelle: Fahrzeuge, Soldaten, Schiffe, Jets, Gebäude, Landschaft, Logo |
+| `src/game/map.ts` | Kartengenerator für Binnenland, Küste und Seenplatte |
 | `src/game/terrain.ts` | malt den Boden einmal in ein großes Bild |
-| `src/game/game.ts` | Spiellogik: Bewegung, Kampf, Produktion, Erzabbau, Nebel |
-| `src/game/path.ts` | A*-Wegfindung mit Pfadglättung |
-| `src/game/ai.ts` | Computergegner |
-| `src/game/render.ts` | zeichnet ein Bild: Boden, Schatten, Objekte, Effekte, Nebel |
+| `src/game/atmos.ts` | Wasser und Brandung, Wolken, Tageszeit, Lichter, Regen, Filmkorn |
+| `src/game/game.ts` | Spiellogik: Bewegung an Land und auf See, Kampf, Jets, Träger, Transport, Ränge, Produktion, Nebel |
+| `src/game/path.ts` | A*-Wegfindung mit Pfadglättung, für Land und Wasser |
+| `src/game/ai.ts` | Computergegner mit Heer, Marine und Luftschlägen |
+| `src/game/render.ts` | zeichnet ein Bild: Boden, Schatten, Objekte, Effekte, Licht, Nebel |
 | `src/game/input.ts` | Maus und Tastatur |
-| `src/ui/hud.ts` | Seitenleiste mit Minikarte, Baumenü und Auswahl |
+| `src/ui/hud.ts` | Seitenleiste: Lagekarte, Baumenü mit Datenkarten, Auswahl, Funkprotokoll |
 
 `preview.html` (nur im Dev-Server) zeigt alle Modelle nebeneinander.
 
