@@ -1,11 +1,13 @@
 // The isometric projection. World positions are in tiles (x runs down-right on screen, y down-left),
-// heights are in voxels. One tile is a 32×16 px diamond, which is 16 voxels along each side.
+// heights are in model units. One tile is a 64×32 px diamond, which is 16 units along each side.
 
-export const TW = 32
-export const TH = 16
+/** screen pixels per model unit along the ground (models are 16 units to a tile) */
+export const SCALE = 2
+export const TW = 32 * SCALE
+export const TH = 16 * SCALE
 export const VOX_PER_TILE = 16
-/** screen pixels per voxel of height */
-export const KZ = 1.25
+/** screen pixels per unit of height */
+export const KZ = 1.25 * SCALE
 
 /** world (tiles, z in voxels) → world pixels (before the camera) */
 export function isoX(x: number, y: number): number {

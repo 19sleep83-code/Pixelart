@@ -113,9 +113,10 @@ function hatch(m: Vox, x: number, y: number, z: number, c: number) {
   m.set(x, y, z, shade(c, 1.2))
 }
 
+/** a whip antenna: thin as the fine grid allows, swaying back a little */
 function antenna(m: Vox, x: number, y: number, z: number, h: number) {
-  m.box(x, y, z, x, y, z + h, GUN)
-  m.set(x, y, z + h, GUN_HI)
+  m.rod(x + 0.25, y + 0.25, z, x + 0.25, y - 0.5, z + h + 1.5, GUN)
+  m.dot(x + 0.25, y - 0.5, z + h + 1.5, GUN_HI)
 }
 
 /** a cluster of smoke grenade dischargers, facing forward */
@@ -125,8 +126,14 @@ function smokeCups(m: Vox, x: number, y: number, z: number, n: number, c: number
 
 /** a tactical number in white on a side */
 function plate(m: Vox, x: number, y: number, z: number, along = true) {
-  for (let k = 0; k < 3; k++) if (along) m.set(x, y + k, z, k === 1 ? COL.white : shade(COL.white, 0.8))
-  else m.set(x + k, y, z, k === 1 ? COL.white : shade(COL.white, 0.8))
+  // three small white digits
+  for (let k = 0; k < 3; k++)
+    for (let d = 0; d < 2; d++) {
+      const yy = y + k * 1 + 0.25, zz = z + d * 0.5
+      if ((k + d) % 3 === 2) continue
+      if (along) m.dot(x + (x < m.w / 2 ? 0 : 0.5), yy, zz, COL.white)
+      else m.dot(x + k + 0.25, y + (y < m.l / 2 ? 0 : 0.5), zz, COL.white)
+    }
 }
 
 // ─────────────────────────────────────────────────────────── soldiers
@@ -1011,7 +1018,12 @@ function railing(m: Vox, z: number, y0: number, y1: number) {
     for (let x = 0; x < m.w; x++) {
       if (!m.get(x, y, z - 1)) continue
       const edge = !m.get(x - 1, y, z - 1) || !m.get(x + 1, y, z - 1)
-      if (edge && (y % 2 === 0)) m.set(x, y, z, hex('d8dcd8'))
+      if (!edge) continue
+      // posts and a top rail, one fine voxel thick
+      const ox = !m.get(x - 1, y, z - 1) ? 0 : 0.5
+      if (y % 2 === 0) m.rod(x + ox, y, z, x + ox, y, z + 0.6, hex('d8dcd8'))
+      m.dot(x + ox, y, z + 0.6, hex('d8dcd8'))
+      m.dot(x + ox, y + 0.5, z + 0.6, hex('d8dcd8'))
     }
 }
 

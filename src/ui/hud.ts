@@ -68,8 +68,8 @@ export class Hud {
       const b = this.mini.getBoundingClientRect()
       const mx = ((e.clientX - b.left) / b.width) * this.mini.width
       const my = ((e.clientY - b.top) / b.height) * this.mini.height
-      const sx = (mx / this.mini.width) * terrain.cv.width - terrain.ox
-      const sy = (my / this.mini.height) * terrain.cv.height
+      const sx = (mx / this.mini.width) * terrain.width - terrain.ox
+      const sy = (my / this.mini.height) * terrain.height
       const w = { x: (sx / (TW / 2) + sy / (TH / 2)) / 2, y: (sy / (TH / 2) - sx / (TW / 2)) / 2 }
       if (e.button === 2 || e.buttons === 2) {
         const units = input.sel.filter((u) => !u.isB && u.owner === 0)
@@ -396,7 +396,7 @@ export class Hud {
     c.fillStyle = '#0b0d09'
     c.fillRect(0, 0, W, H)
     c.drawImage(T.miniMap(W, H), 0, 0)
-    const kx = W / T.cv.width, ky = H / T.cv.height
+    const kx = W / T.width, ky = H / T.height
     const pt = (x: number, y: number) => [((x - y) * (TW / 2) + T.ox) * kx, (x + y) * (TH / 2) * ky]
     for (const e of g.ents) {
       if (e.dead || !this.r.shown(e)) continue

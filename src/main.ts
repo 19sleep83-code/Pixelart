@@ -114,7 +114,7 @@ function startDemo(A: Assets) {
   terrain.paint()
   terrain.bakeStatics(A)
   const r = new Renderer(game, A, terrain, cv)
-  r.grain = 0.06
+  r.grain = 0
   const ais = [new AI(game), new AI(game)]
   ais[0].p = 0
   // get the war going before anyone looks
@@ -125,7 +125,7 @@ function startDemo(A: Assets) {
   const d: Demo = { game, r, ais, raf: 0, focus: { x: game.map.N / 2, y: game.map.N / 2 }, next: 0 }
   demo = d
   const size = () => {
-    const s = window.innerWidth > 1400 ? 3 : 2
+    const s = window.innerWidth > 1400 ? 1.5 : 1
     r.resize(Math.ceil(window.innerWidth / s), Math.ceil(window.innerHeight / s))
     cv.style.width = `${r.W * s}px`
     cv.style.height = `${r.H * s}px`
@@ -161,6 +161,7 @@ function startDemo(A: Assets) {
     cy += (d.focus.y - cy) * Math.min(1, dt * 0.4)
     r.lookAt(cx, cy)
     r.draw({}, dt)
+    terrain.prefetch(r.cam.x, r.cam.y, r.W, r.H, 3)
     if (game.over) {
       startDemo(A)
       return
@@ -180,7 +181,7 @@ function stopDemo() {
 function drawLogo(A: Assets) {
   const logo = $<HTMLCanvasElement>('logo')
   const t = A.title!
-  const s = window.innerWidth > 1300 && window.innerHeight > 1000 ? 3 : 2
+  const s = window.innerWidth > 1300 && window.innerHeight > 1000 ? 1.5 : 1
   logo.width = t.w
   logo.height = t.h
   logo.style.width = `${t.w * s}px`
@@ -278,12 +279,14 @@ async function start() {
   const view = $<HTMLCanvasElement>('view')
   const wrap = $('view-wrap')
   const r = new Renderer(game, A, terrain, view)
-  r.grain = store.get('grain') === '0' ? 0 : 0.05
+  r.grain = store.get('grain') === '1' ? 0.05 : 0
   const abort = new AbortController()
-  let zoom = Number(store.get('zoom') ?? 0)
+  // zoom levels: screen pixels per picture pixel
+  const LEVELS = [1, 1.5, 2, 3]
+  let zoom = Number(store.get('zoom2') ?? 0)
   const scale = () => {
-    const base = wrap.clientWidth > 1500 ? 3 : 2
-    return Math.max(1, Math.min(5, base + zoom))
+    const base = wrap.clientWidth > 1500 ? 1 : 0
+    return LEVELS[Math.max(0, Math.min(LEVELS.length - 1, base + zoom))]
   }
   const resize = () => {
     const s = scale()
@@ -306,9 +309,9 @@ async function start() {
       e.preventDefault()
       const before = scale()
       zoom += e.deltaY < 0 ? 1 : -1
-      zoom = Math.max(-1, Math.min(2, zoom))
+      zoom = Math.max(-1, Math.min(3, zoom))
       if (scale() !== before) {
-        store.set('zoom', String(zoom))
+        store.set('zoom2', String(zoom))
         resize()
       }
     },
@@ -371,6 +374,7 @@ async function start() {
     }
     input.frame()
     r.draw(input.overlay, s.paused ? 0 : dt)
+    terrain.prefetch(r.cam.x, r.cam.y, r.W, r.H, 4)
     hud.update()
     if (frames++ % 4 === 0) hud.drawMini()
     if (game.over && !s.ended) {

@@ -296,14 +296,14 @@ export class Input {
 
   /** move the view with keys and screen edges */
   scroll(dt: number) {
-    const sp = 520 * dt / Math.max(1, this.scale() / 2)
+    const sp = (1040 * dt) / Math.max(1, this.scale())
     let dx = 0, dy = 0
     if (this.keys.has('ArrowLeft')) dx -= sp
     if (this.keys.has('ArrowRight')) dx += sp
     if (this.keys.has('ArrowUp')) dy -= sp
     if (this.keys.has('ArrowDown')) dy += sp
     if (this.mouse.inside && !this.down && !this.pan && document.hasFocus()) {
-      const m = 4
+      const m = 8
       if (this.mouse.x <= m) dx -= sp
       const wrap = this.el.parentElement!
       const s = this.scale()

@@ -8,7 +8,10 @@ import type { Game, Ent } from './game'
 import type { Assets } from './assets'
 import { mountOffset } from './assets'
 import type { Terrain } from './terrain'
-import { TW, TH, KZ, unIso, css } from '../core/iso'
+import { TW, TH, KZ, SCALE, unIso, css } from '../core/iso'
+
+/** screen pixels per unit: everything drawn by hand scales with it */
+const P = SCALE
 import { makeCanvas, type Sprite } from '../core/voxel'
 import { Ter } from './map'
 import { hash2 } from '../core/rng'
@@ -62,8 +65,8 @@ export class Renderer {
   clampCam() {
     const N = this.game.map.N
     const half = (N * TW) / 2
-    this.cam.x = Math.max(-half - 40, Math.min(half - this.W + 40, this.cam.x))
-    this.cam.y = Math.max(-40, Math.min(N * TH - this.H + 40, this.cam.y))
+    this.cam.x = Math.max(-half - 40 * P, Math.min(half - this.W + 40 * P, this.cam.x))
+    this.cam.y = Math.max(-40 * P, Math.min(N * TH - this.H + 40 * P, this.cam.y))
   }
 
   /** centre the view on a world position */
@@ -82,7 +85,7 @@ export class Renderer {
   }
 
   addShake(k: number) {
-    this.shake = Math.min(7, this.shake + k)
+    this.shake = Math.min(7 * P, this.shake + k * P)
   }
 
   /** what stands under a screen pixel (topmost first) */
@@ -109,8 +112,8 @@ export class Renderer {
       } else {
         const s = this.toScreen(e.x, e.y, e.z)
         if (e.carriedBy) continue
-        const r = e.u!.infantry ? 7 : e.naval ? (e.radius > 0.9 ? 26 : 17) : 13
-        const cy = s.y - (e.u!.infantry ? 8 : e.naval ? 8 : 6)
+        const r = (e.u!.infantry ? 7 : e.naval ? (e.radius > 0.9 ? 26 : 17) : 13) * P
+        const cy = s.y - (e.u!.infantry ? 8 : e.naval ? 8 : 6) * P
         if (Math.abs(px - s.x) <= r && Math.abs(py - cy) <= r) {
           const k = e.x + e.y + (e.air ? 100 : 0)
           if (k > bk) {
@@ -154,10 +157,11 @@ export class Renderer {
     c = makeCanvas(W, H)
     const x = c.getContext('2d')!
     x.fillStyle = css(color)
-    for (let a = 0; a < 360; a += 2) {
-      const t = (a / 180) * Math.PI
-      x.fillRect(Math.round(W / 2 - 0.5 + Math.cos(t) * rx), Math.round(H / 2 - 0.5 + Math.sin(t) * rx * 0.5), 1, 1)
-    }
+    for (const rr of rx > 3 ? [rx, rx - 1] : [rx])
+      for (let a = 0; a < 360; a += 1) {
+        const t = (a / 180) * Math.PI
+        x.fillRect(Math.round(W / 2 - 0.5 + Math.cos(t) * rr), Math.round(H / 2 - 0.5 + Math.sin(t) * rr * 0.5), 1, 1)
+      }
     this.rings.set(key, c)
     return c
   }
@@ -197,16 +201,16 @@ export class Renderer {
     ctx.globalCompositeOperation = 'source-over'
     ctx.fillStyle = '#141a12'
     ctx.fillRect(0, 0, this.W, this.H)
-    ctx.drawImage(T.cv, camX + T.ox, camY, this.W, this.H, 0, 0, this.W, this.H)
+    T.draw(ctx, camX, camY, this.W, this.H)
 
     // the tiles in view (with a margin for tall things)
-    const c0 = unIso(camX - 40, camY - 60), c1 = unIso(camX + this.W + 40, camY - 60)
-    const c2 = unIso(camX - 40, camY + this.H + 60), c3 = unIso(camX + this.W + 40, camY + this.H + 60)
+    const c0 = unIso(camX - 40 * P, camY - 60 * P), c1 = unIso(camX + this.W + 40 * P, camY - 60 * P)
+    const c2 = unIso(camX - 40 * P, camY + this.H + 60 * P), c3 = unIso(camX + this.W + 40 * P, camY + this.H + 60 * P)
     const tx0 = Math.max(0, Math.floor(Math.min(c0.x, c1.x, c2.x, c3.x)))
     const tx1 = Math.min(N - 1, Math.ceil(Math.max(c0.x, c1.x, c2.x, c3.x)))
     const ty0 = Math.max(0, Math.floor(Math.min(c0.y, c1.y, c2.y, c3.y)))
     const ty1 = Math.min(N - 1, Math.ceil(Math.max(c0.y, c1.y, c2.y, c3.y)))
-    const onScreen = (x: number, y: number, m = 60) => {
+    const onScreen = (x: number, y: number, m = 60 * P) => {
       const s = scr(x, y)
       return s.x > -m && s.x < this.W + m && s.y > -m && s.y < this.H + m * 1.5
     }
@@ -248,7 +252,7 @@ export class Renderer {
       if (e.isB) continue
       {
         const s = scr(e.x, e.y)
-        const r = e.u!.infantry ? 5 : Math.round(e.u!.radius * (e.naval ? 24 : 22))
+        const r = Math.round((e.u!.infantry ? 5 : e.u!.radius * (e.naval ? 24 : 22)) * P)
         ctx.globalAlpha = e.selected ? 1 : 0.55
         ctx.drawImage(this.ring(r, col), s.x - r - 1, s.y - Math.floor(r / 2) - 1)
         ctx.globalAlpha = 1
@@ -308,7 +312,7 @@ export class Renderer {
     }
     const airList: Ent[] = []
     for (const e of g.ents) {
-      if (e.dead || !onScreen(e.x, e.y, 90) || !this.shown(e)) continue
+      if (e.dead || !onScreen(e.x, e.y, 90 * P) || !this.shown(e)) continue
       if (e.air && e.z > 3) {
         airList.push(e)
         continue
@@ -339,58 +343,58 @@ export class Renderer {
       switch (f.kind) {
         case 'smoke':
         case 'dust': {
-          const r = Math.min(8, Math.round(f.size + k * 3) - 1)
           // the heavy smoke of a blast is dark, big and grows as it rises
           const heavy = f.kind === 'smoke' && f.size >= 4
-          const sp = (f.kind === 'dust' ? A.dust : heavy ? A.soot : A.smoke)[Math.max(0, r)]
+          const set = f.kind === 'dust' ? A.dust : heavy ? A.soot : A.smoke
+          const r = heavy ? Math.min(set.length - 1, Math.round(f.size * 0.9 + k * 7) - 2) : Math.min(8, Math.round(f.size + k * 3) - 1)
+          const sp = set[Math.max(0, r)]
           ctx.globalAlpha = (1 - k) * (f.kind === 'dust' ? 0.5 : heavy ? 0.85 : 0.7)
-          if (heavy) {
-            const sc = 1.3 + k * 1.4
-            ctx.drawImage(sp.cv, Math.round(q.x - sp.ax * sc), Math.round(q.y - sp.ay * sc), Math.round(sp.w * sc), Math.round(sp.h * sc))
-          } else this.drawSprite(sp, q.x, q.y)
+          this.drawSprite(sp, q.x, q.y)
           ctx.globalAlpha = 1
           break
         }
         case 'debris':
           ctx.fillStyle = k < 0.25 ? '#ffb050' : '#2a2622'
-          ctx.fillRect(q.x, q.y, f.size >= 3 ? 4 : 2, f.size >= 3 ? 3 : 1)
+          ctx.fillRect(q.x, q.y, (f.size >= 3 ? 4 : 2) * P, (f.size >= 3 ? 3 : 1) * P)
           break
         case 'clod': {
           // earth thrown up by a blast
           ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1
           const h = hash2(Math.round(f.vx * 1000), Math.round(f.life * 1000), 3)
           ctx.fillStyle = h < 0.35 ? '#4a3a28' : h < 0.7 ? '#6a5438' : '#2e261e'
-          ctx.fillRect(q.x, q.y, f.size, f.size - 1 || 1)
-          if (f.size >= 3) {
-            ctx.fillStyle = '#8a7252'
-            ctx.fillRect(q.x, q.y, 1, 1)
-          }
+          ctx.fillRect(q.x, q.y, f.size * P - 1, (f.size - 1 || 1) * P)
+          ctx.fillStyle = '#8a7252'
+          ctx.fillRect(q.x, q.y, f.size >= 3 ? 2 : 1, 1)
           ctx.globalAlpha = 1
           break
         }
         case 'wake': {
           // foam spreading behind a boat
-          const r = Math.round(f.size * (0.6 + k * 1.4))
+          const r = Math.round(f.size * P * (0.6 + k * 1.4))
           ctx.globalAlpha = (1 - k) * 0.75
           ctx.fillStyle = '#eef6f6'
           ctx.fillRect(q.x - r, q.y, r * 2 + 1, 1)
-          if (r > 1) {
-            ctx.fillRect(q.x - r + 1, q.y - 1, 1, 1)
-            ctx.fillRect(q.x + r - 1, q.y + 1, 1, 1)
+          ctx.fillRect(q.x - r + 2, q.y + 1, r * 2 - 3, 1)
+          if (r > 2) {
+            ctx.fillStyle = '#c8dde2'
+            ctx.fillRect(q.x - r + 1, q.y - 1, 2, 1)
+            ctx.fillRect(q.x + r - 2, q.y + 2, 2, 1)
           }
           ctx.globalAlpha = 1
           break
         }
         case 'splash': {
           // a column of water and its ring
-          const h = Math.round(Math.sin(Math.min(1, k * 1.4) * Math.PI) * (6 + f.size * 6))
-          const w = 1 + f.size
+          const h = Math.round(Math.sin(Math.min(1, k * 1.4) * Math.PI) * (6 + f.size * 6) * P)
+          const w = (1 + f.size) * P
           ctx.globalAlpha = 1 - k * 0.7
           ctx.fillStyle = '#e8f2f6'
           ctx.fillRect(q.x - w, q.y - h, w * 2, h)
           ctx.fillStyle = '#b8d4e0'
-          ctx.fillRect(q.x - w, q.y - h, 1, h)
-          const rr = Math.round(2 + k * (5 + f.size * 3))
+          ctx.fillRect(q.x - w, q.y - h, P, h)
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(q.x - Math.round(w / 2), q.y - h, w, P)
+          const rr = Math.round((2 + k * (5 + f.size * 3)) * P)
           ctx.drawImage(this.ring(rr, 0xd8eef4), q.x - rr - 1, q.y - Math.floor(rr / 2) - 1)
           ctx.globalAlpha = 1
           break
@@ -407,10 +411,10 @@ export class Renderer {
       if (f.t < 0 || !this.visiblePt(f.x, f.y)) continue
       const q = scr(f.x, f.y, f.z)
       const k = f.t / f.life
-      if (f.kind === 'exp') lights.push({ x: q.x, y: q.y - 4, r: 20 + f.size * 16, color: 'rgba(255,170,80,0.95)', a: (1 - k) * (0.55 + level * 0.5) })
-      else if (f.kind === 'ember') lights.push({ x: q.x, y: q.y, r: 3, color: 'rgba(255,170,60,1)', a: (1 - k) * (0.5 + level * 0.5) })
-      else if (f.kind === 'fire') lights.push({ x: q.x, y: q.y - 3, r: 12, color: 'rgba(255,140,50,0.8)', a: 0.25 + level * 0.6 })
-      else if (f.kind === 'flash') lights.push({ x: q.x, y: q.y, r: 6 + f.size * 3, color: 'rgba(255,230,160,0.9)', a: 0.4 + level * 0.6 })
+      if (f.kind === 'exp') lights.push({ x: q.x, y: q.y - 4 * P, r: (20 + f.size * 16) * P, color: 'rgba(255,170,80,0.95)', a: (1 - k) * (0.55 + level * 0.5) })
+      else if (f.kind === 'ember') lights.push({ x: q.x, y: q.y, r: 3 * P, color: 'rgba(255,170,60,1)', a: (1 - k) * (0.5 + level * 0.5) })
+      else if (f.kind === 'fire') lights.push({ x: q.x, y: q.y - 3 * P, r: 12 * P, color: 'rgba(255,140,50,0.8)', a: 0.25 + level * 0.6 })
+      else if (f.kind === 'flash') lights.push({ x: q.x, y: q.y, r: (6 + f.size * 3) * P, color: 'rgba(255,230,160,0.9)', a: 0.4 + level * 0.6 })
     }
     atm.lights(ctx, lights, (r, c) => A.glowOf(r, c))
 
@@ -429,20 +433,20 @@ export class Renderer {
         }
         case 'shell':
           ctx.fillStyle = '#fff4c0'
-          ctx.fillRect(q.x - 1, q.y, 2, 1)
+          ctx.fillRect(q.x - 2, q.y, 4, 2)
           break
         case 'rocket':
         case 'mlrs':
           ctx.fillStyle = '#e8e2d0'
-          ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
+          ctx.fillRect(q.x - 2, q.y - 1, 4, 3)
           ctx.fillStyle = '#ffd060'
-          ctx.fillRect(q.x, q.y, 1, 1)
+          ctx.fillRect(q.x, q.y, 2, 2)
           break
         case 'missile': {
           ctx.fillStyle = '#d8dcd8'
-          ctx.fillRect(q.x - 1, q.y - 1, 3, 2)
+          ctx.fillRect(q.x - 3, q.y - 1, 6, 3)
           ctx.fillStyle = '#ffe080'
-          ctx.fillRect(q.x, q.y, 1, 1)
+          ctx.fillRect(q.x - 1, q.y, 2, 2)
           break
         }
         case 'snipe': {
@@ -456,11 +460,11 @@ export class Renderer {
         case 'art': {
           const gq = scr(p.x, p.y)
           ctx.fillStyle = 'rgba(0,0,0,0.3)'
-          ctx.fillRect(gq.x - 1, gq.y, 2, 1)
+          ctx.fillRect(gq.x - 2, gq.y, 4, 2)
           ctx.fillStyle = '#2a2a28'
-          ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
+          ctx.fillRect(q.x - 2, q.y - 2, 4, 4)
           ctx.fillStyle = '#ffe6a0'
-          ctx.fillRect(q.x, q.y - 1, 1, 1)
+          ctx.fillRect(q.x, q.y - 2, 2, 1)
           break
         }
       }
@@ -501,22 +505,22 @@ export class Renderer {
         case 'flash': {
           ctx.globalCompositeOperation = 'lighter'
           if (f.size > 3) {
-            const r = Math.round(f.size * 3 * (1 - k * 0.5))
+            const r = Math.round(f.size * 3 * P * (1 - k * 0.5))
             ctx.globalAlpha = 1 - k
             ctx.drawImage(A.glowOf(r, 'rgba(255,240,200,1)'), q.x - r, q.y - r)
             ctx.globalAlpha = 1
           } else {
-            ctx.fillStyle = '#ffe8a0'
-            ctx.fillRect(q.x - f.size, q.y - f.size, f.size * 2, f.size * 2)
+            const r = Math.round(f.size * P)
+            ctx.drawImage(A.glowOf(r * 2, 'rgba(255,236,170,1)'), q.x - r * 2, q.y - r * 2)
           }
           ctx.fillStyle = '#ffffff'
-          ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
+          ctx.fillRect(q.x - P, q.y - P, P * 2, P * 2)
           ctx.globalCompositeOperation = 'source-over'
           break
         }
         case 'ring': {
           // the pressure wave
-          const rr = Math.round(3 + k * (10 + f.size * 15))
+          const rr = Math.round((3 + k * (10 + f.size * 15)) * P)
           ctx.globalAlpha = (1 - k) * 0.75
           ctx.drawImage(this.ring(rr, 0xfff0d2), q.x - rr - 1, q.y - Math.floor(rr / 2) - 1)
           if (rr > 4) {
@@ -529,12 +533,12 @@ export class Renderer {
         }
         case 'ember':
           ctx.fillStyle = k < 0.5 ? '#ffe070' : '#ff7a28'
-          ctx.fillRect(q.x, q.y, 1, k < 0.3 ? 2 : 1)
+          ctx.fillRect(q.x, q.y, P, k < 0.3 ? P * 2 : P)
           break
         case 'spark':
           ctx.fillStyle = k < 0.5 ? '#fff0a0' : '#ff9a40'
-          ctx.fillRect(q.x + Math.round(Math.sin(f.t * 40) * 2), q.y - Math.round(k * 3), 1, 1)
-          ctx.fillRect(q.x - Math.round(Math.cos(f.t * 37) * 2), q.y - Math.round(k * 2), 1, 1)
+          ctx.fillRect(q.x + Math.round(Math.sin(f.t * 40) * 2 * P), q.y - Math.round(k * 3 * P), P, P)
+          ctx.fillRect(q.x - Math.round(Math.cos(f.t * 37) * 2 * P), q.y - Math.round(k * 2 * P), P, P)
           break
       }
     }
@@ -551,34 +555,36 @@ export class Renderer {
       if (e.isB) {
         const art = A.buildings[g.players[e.owner].faction][e.key]
         const s = scr(e.x, e.y)
-        w = e.w * 12
+        w = e.w * 12 * P
         x = s.x - w / 2
-        y = s.y - art.body.ay + 2
+        y = s.y - art.body.ay + 2 * P
       } else {
         const s = scr(e.x, e.y, e.z)
-        w = e.u!.infantry ? 10 : e.naval ? (e.radius > 0.9 ? 30 : 22) : 18
+        w = (e.u!.infantry ? 10 : e.naval ? (e.radius > 0.9 ? 30 : 22) : 18) * P
         x = s.x - w / 2
-        y = s.y - (e.u!.infantry ? 22 : e.air ? 28 : e.naval ? (e.radius > 0.9 ? 40 : 28) : 22)
+        y = s.y - (e.u!.infantry ? 22 : e.air ? 28 : e.naval ? (e.radius > 0.9 ? 40 : 28) : 22) * P
       }
       ctx.fillStyle = '#0c0e0a'
-      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, 4)
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, 6)
       ctx.fillStyle = k > 0.6 ? '#5fd65a' : k > 0.3 ? '#e8c03a' : '#e2492f'
-      ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w * k)), 2)
+      ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w * k)), 4)
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'
+      ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w * k)), 1)
       // rank stripes
-      if (e.rank > 0) this.chevrons(Math.round(x) + w + 2, Math.round(y) - 1, e.rank)
+      if (e.rank > 0) this.chevrons(Math.round(x) + w + 3, Math.round(y) - 2, e.rank)
       // a landing ship shows who is aboard
       if (e.u?.transport && e.owner === 0) {
         for (let i = 0; i < e.u.transport; i++) {
           ctx.fillStyle = i < e.passengers.length ? '#e0b532' : '#0c0e0a'
-          ctx.fillRect(Math.round(x) + i * 3, Math.round(y) + 3, 2, 2)
+          ctx.fillRect(Math.round(x) + i * 6, Math.round(y) + 6, 4, 4)
         }
       }
       // a harvester shows its load
       if (e.u?.harvester && e.owner === 0) {
         ctx.fillStyle = '#0c0e0a'
-        ctx.fillRect(Math.round(x) - 1, Math.round(y) + 3, w + 2, 2)
+        ctx.fillRect(Math.round(x) - 1, Math.round(y) + 5, w + 2, 4)
         ctx.fillStyle = '#e0b532'
-        ctx.fillRect(Math.round(x), Math.round(y) + 3, Math.round((w * e.cargo) / HARVEST_LOAD), 1)
+        ctx.fillRect(Math.round(x), Math.round(y) + 6, Math.round((w * e.cargo) / HARVEST_LOAD), 2)
       }
     }
 
@@ -605,8 +611,8 @@ export class Renderer {
       const a = scr(e.x, e.y), b = scr(e.rally.x, e.rally.y)
       this.dashed(a.x, a.y, b.x, b.y, '#9cff8a')
       ctx.fillStyle = '#9cff8a'
-      ctx.fillRect(b.x - 1, b.y - 6, 1, 6)
-      ctx.fillRect(b.x, b.y - 6, 3, 2)
+      ctx.fillRect(b.x - 1, b.y - 6 * P, P, 6 * P)
+      ctx.fillRect(b.x, b.y - 6 * P, 3 * P, 2 * P)
     }
     // where a move order went
     if (o.moveMark) {
@@ -614,7 +620,7 @@ export class Renderer {
       const k = Math.min(1, (g.time - m.t) / 0.5)
       if (k < 1) {
         const s = scr(m.x, m.y)
-        const r = Math.round(7 * (1 - k)) + 2
+        const r = Math.round((7 * (1 - k) + 2) * P)
         ctx.drawImage(this.ring(r, m.attack ? 0xff5a4a : 0x7dff6a), s.x - r - 1, s.y - Math.floor(r / 2) - 1)
       }
     }
@@ -704,15 +710,15 @@ export class Renderer {
       const tx = -Math.cos(e.dir) * 0.55, ty = -Math.sin(e.dir) * 0.55
       const q = scr(e.x + tx, e.y + ty, e.z + 2)
       ctx.fillStyle = '#ff8a30'
-      ctx.fillRect(q.x - 1, q.y - 1, 3, 2)
+      ctx.fillRect(q.x - 3, q.y - 2, 6, 4)
       ctx.fillStyle = '#fff2b0'
-      ctx.fillRect(q.x, q.y - 1, 1, 1)
+      ctx.fillRect(q.x - 1, q.y - 1, 2, 2)
     }
     if (art.rotor) {
       // two blades turning fast, with a faint blur disc
       const [dx, dy] = mountOffset([0, 0, art.rotor.z], e.dir)
       const cx = s.x + dx, cy = s.y + dy
-      const r = art.rotor.r
+      const r = art.rotor.r * P
       ctx.globalAlpha = 0.16
       ctx.fillStyle = '#d8dcd0'
       ctx.beginPath()
@@ -741,22 +747,23 @@ export class Renderer {
   /** rank stripes: one or two chevrons, a star for a veteran */
   private chevrons(x: number, y: number, rank: number) {
     const ctx = this.ctx
+    const px = (a: number, b: number, w: number, h: number) => ctx.fillRect(x + a * P, y + b * P, w * P, h * P)
     ctx.fillStyle = '#0c0e0a'
-    ctx.fillRect(x - 1, y - 1, 7, rank >= 3 ? 7 : rank * 3 + 1)
+    px(-1, -1, 7, rank >= 3 ? 7 : rank * 3 + 1)
     ctx.fillStyle = '#f0c840'
     if (rank >= 3) {
-      ctx.fillRect(x + 2, y, 1, 5)
-      ctx.fillRect(x, y + 2, 5, 1)
-      ctx.fillRect(x + 1, y + 1, 3, 3)
+      px(2, 0, 1, 5)
+      px(0, 2, 5, 1)
+      px(1, 1, 3, 3)
       return
     }
     for (let k = 0; k < rank; k++) {
-      const yy = y + k * 3
-      ctx.fillRect(x, yy, 1, 1)
-      ctx.fillRect(x + 1, yy + 1, 1, 1)
-      ctx.fillRect(x + 2, yy + 2 - 1, 1, 1)
-      ctx.fillRect(x + 3, yy + 1, 1, 1)
-      ctx.fillRect(x + 4, yy, 1, 1)
+      const yy = k * 3
+      px(0, yy, 1, 1)
+      px(1, yy + 1, 1, 1)
+      px(2, yy + 1, 1, 1)
+      px(3, yy + 1, 1, 1)
+      px(4, yy, 1, 1)
     }
   }
 
@@ -772,31 +779,31 @@ export class Renderer {
         const n = Math.min(2, e.w + e.h - 2)
         for (let k = 0; k < n; k++) {
           const q = scr(e.tx + 0.3 + hash2(e.id, k, 1) * (e.w - 0.6), e.ty + 0.3 + hash2(e.id, k, 2) * (e.h - 0.6), 6 + hash2(e.id, k, 3) * 6)
-          out.push({ x: q.x, y: q.y, r: 8, color: 'rgba(255,214,140,0.85)', a: level * 0.75 })
+          out.push({ x: q.x, y: q.y, r: 8 * P, color: 'rgba(255,214,140,0.85)', a: level * 0.75 })
         }
         if (blink) {
           const q = scr(e.x, e.y, 16 + e.w * 3)
-          out.push({ x: q.x, y: q.y, r: 4, color: e.owner === 0 ? 'rgba(120,255,120,1)' : 'rgba(255,90,70,1)', a: level })
+          out.push({ x: q.x, y: q.y, r: 4 * P, color: e.owner === 0 ? 'rgba(120,255,120,1)' : 'rgba(255,90,70,1)', a: level })
         }
         continue
       }
       if (e.u!.infantry) continue
       if (e.air) {
         const q = scr(e.x, e.y, e.z)
-        if (blink) out.push({ x: q.x, y: q.y, r: 4, color: 'rgba(255,70,60,1)', a: level })
+        if (blink) out.push({ x: q.x, y: q.y, r: 4 * P, color: 'rgba(255,70,60,1)', a: level })
         continue
       }
       if (e.naval) {
         const q = scr(e.x, e.y, 8)
-        out.push({ x: q.x, y: q.y, r: 10 + e.radius * 8, color: 'rgba(255,220,150,0.8)', a: level * 0.6 })
+        out.push({ x: q.x, y: q.y, r: (10 + e.radius * 8) * P, color: 'rgba(255,220,150,0.8)', a: level * 0.6 })
         const l = scr(e.x - Math.sin(e.dir) * e.radius * 0.5, e.y + Math.cos(e.dir) * e.radius * 0.5, 6)
         const r = scr(e.x + Math.sin(e.dir) * e.radius * 0.5, e.y - Math.cos(e.dir) * e.radius * 0.5, 6)
-        out.push({ x: l.x, y: l.y, r: 3, color: 'rgba(80,255,120,1)', a: level }, { x: r.x, y: r.y, r: 3, color: 'rgba(255,60,60,1)', a: level })
+        out.push({ x: l.x, y: l.y, r: 3 * P, color: 'rgba(80,255,120,1)', a: level }, { x: r.x, y: r.y, r: 3 * P, color: 'rgba(255,60,60,1)', a: level })
         continue
       }
       // headlights on the ground ahead
       const q = scr(e.x + Math.cos(e.dir) * 0.8, e.y + Math.sin(e.dir) * 0.8, 1)
-      out.push({ x: q.x, y: q.y, r: 10, color: 'rgba(255,245,210,0.8)', a: level * 0.7 })
+      out.push({ x: q.x, y: q.y, r: 10 * P, color: 'rgba(255,245,210,0.8)', a: level * 0.7 })
     }
     // windows in the villages
     for (let ty = ty0; ty <= ty1; ty++)
@@ -807,23 +814,23 @@ export class Renderer {
         for (const s of st) {
           if (s.kind === 'oak' || s.kind === 'pine' || s.kind === 'birch' || s.kind === 'barn') continue
           const q = scr(s.x + 0.2, s.y + 0.2, 4)
-          out.push({ x: q.x, y: q.y, r: 8, color: 'rgba(255,200,120,0.85)', a: level * 0.8 })
+          out.push({ x: q.x, y: q.y, r: 8 * P, color: 'rgba(255,200,120,0.85)', a: level * 0.8 })
         }
       }
   }
 
-  private line(x0: number, y0: number, x1: number, y1: number, col: string) {
+  private line(x0: number, y0: number, x1: number, y1: number, col: string, t = 1) {
     const ctx = this.ctx
     ctx.fillStyle = col
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1)
-    for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), 1, 1)
+    for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), t, t)
   }
 
   private dashed(x0: number, y0: number, x1: number, y1: number, col: string) {
     const ctx = this.ctx
     ctx.fillStyle = col
     const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1)
-    for (let i = 0; i <= n; i++) if ((i >> 2) % 2 === 0) ctx.fillRect(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), 1, 1)
+    for (let i = 0; i <= n; i++) if ((i >> 3) % 2 === 0) ctx.fillRect(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), 2, 2)
   }
 
   private tile(scr: (x: number, y: number) => { x: number; y: number }, tx: number, ty: number, fill: string) {
@@ -846,8 +853,8 @@ export class Renderer {
     // corner brackets
     const seg = (p: { x: number; y: number }, q: { x: number; y: number }) => {
       const k = 0.25
-      this.line(p.x, p.y, Math.round(p.x + (q.x - p.x) * k), Math.round(p.y + (q.y - p.y) * k), cs)
-      this.line(q.x, q.y, Math.round(q.x + (p.x - q.x) * k), Math.round(q.y + (p.y - q.y) * k), cs)
+      this.line(p.x, p.y, Math.round(p.x + (q.x - p.x) * k), Math.round(p.y + (q.y - p.y) * k), cs, P)
+      this.line(q.x, q.y, Math.round(q.x + (p.x - q.x) * k), Math.round(q.y + (p.y - q.y) * k), cs, P)
     }
     seg(a, b)
     seg(b, c)

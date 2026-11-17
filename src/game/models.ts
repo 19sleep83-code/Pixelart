@@ -14,8 +14,8 @@ export class BVox extends Vox {
   constructor(wx: number, wy: number, h: number) {
     super(wy, wx, h)
   }
-  override set(x: number, y: number, z: number, c: number, glow = false) {
-    super.set(y, x, z, c, glow)
+  protected override put(fx: number, fy: number, fz: number, v: number) {
+    super.put(fy, fx, fz, v)
   }
 }
 

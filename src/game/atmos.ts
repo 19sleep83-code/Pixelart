@@ -7,7 +7,9 @@ import { Ter } from './map'
 import type { TimeOfDay, Weather } from './game'
 import { hash2, fbm } from '../core/rng'
 import { makeCanvas } from '../core/voxel'
-import { TW, TH } from '../core/iso'
+import { TW, TH, SCALE } from '../core/iso'
+
+const P = SCALE
 
 export interface Light {
   x: number
@@ -44,8 +46,8 @@ export class Atmos {
         if (map.ter[i] !== Ter.Water) continue
         const pts: number[] = []
         const edge = (ax: number, ay: number, bx: number, by: number, nx: number, ny: number) => {
-          for (let k = 0; k < 8; k++) {
-            const t = (k + 0.5) / 8
+          for (let k = 0; k < 10; k++) {
+            const t = (k + 0.5) / 10
             const wx = ax + (bx - ax) * t + nx * 0.07, wy = ay + (by - ay) * t + ny * 0.07
             pts.push((wx - wy) * (TW / 2), (wx + wy) * (TH / 2))
           }
@@ -111,7 +113,8 @@ export class Atmos {
           const wx = tx + u, wy = ty + v
           const sx = Math.round((wx - wy) * (TW / 2) - camX), sy = Math.round((wx + wy) * (TH / 2) - camY)
           ctx.fillStyle = glint
-          ctx.fillRect(sx - (s > 0.94 ? 1 : 0), sy, s > 0.94 ? 3 : 2, 1)
+          ctx.fillRect(sx - (s > 0.94 ? 2 : 0), sy, s > 0.94 ? 6 : 3, 1)
+          if (s > 0.94) ctx.fillRect(sx, sy - 1, 2, 1)
         }
         // slow swell on open water
         if (m.depth[i] >= 3 && hash2(tx, ty, 3) < 0.35) {
@@ -121,7 +124,8 @@ export class Atmos {
           const sx = Math.round((wx - wy) * (TW / 2) - camX), sy = Math.round((wx + wy) * (TH / 2) - camY)
           ctx.globalAlpha = Math.sin(k * Math.PI) * 0.5
           ctx.fillStyle = glint
-          ctx.fillRect(sx, sy, 4, 1)
+          ctx.fillRect(sx, sy, 4 * P, 1)
+          ctx.fillRect(sx + 2, sy + 1, 4 * P - 4, 1)
           ctx.globalAlpha = 1
         }
         // the surf
@@ -133,7 +137,7 @@ export class Atmos {
           const a = 0.5 + 0.5 * Math.sin(t * 1.9 + ph + (f[p] + f[p + 1]) * 0.02)
           if (a < 0.35) continue
           ctx.globalAlpha = a * 0.85
-          ctx.fillRect(Math.round(f[p] - camX), Math.round(f[p + 1] - camY + (a > 0.8 ? 1 : 0)), 2, 1)
+          ctx.fillRect(Math.round(f[p] - camX), Math.round(f[p + 1] - camY + (a > 0.8 ? P : 0)), 2 * P, 1)
         }
         ctx.globalAlpha = 1
       }
@@ -141,7 +145,7 @@ export class Atmos {
 
   /** shadows of clouds drifting with the wind */
   clouds(ctx: CanvasRenderingContext2D, camX: number, camY: number, W: number, H: number, t: number) {
-    const S = 640, SH = 320
+    const S = 640 * P, SH = 320 * P
     const fx = t * 7 - camX, fy = t * 2.5 - camY
     const ox = (((fx % S) + S) % S) - S
     const oy = (((fy % SH) + SH) % SH) - SH
@@ -190,8 +194,8 @@ export class Atmos {
   /** rain streaks, splashes and lightning */
   rain(ctx: CanvasRenderingContext2D, W: number, H: number, dt: number, rand: () => number) {
     if (this.weather !== 'rain') return
-    const want = Math.round((W * H) / 900)
-    while (this.drops.length < want) this.drops.push({ x: rand() * W, y: rand() * H, v: 160 + rand() * 90, l: 4 + Math.floor(rand() * 4) })
+    const want = Math.round((W * H) / (900 * P * P))
+    while (this.drops.length < want) this.drops.push({ x: rand() * W, y: rand() * H, v: (160 + rand() * 90) * P, l: (4 + Math.floor(rand() * 4)) * P })
     if (this.drops.length > want) this.drops.length = want
     ctx.fillStyle = this.tod === 'night' ? 'rgba(150,170,200,0.45)' : 'rgba(210,225,240,0.55)'
     for (const d of this.drops) {
@@ -199,11 +203,12 @@ export class Atmos {
       d.x -= d.v * dt * 0.25
       if (d.y > H || d.x < 0) {
         // a splash where it lands, then back to the top
-        ctx.fillRect(Math.round(d.x) - 1, Math.round(Math.min(d.y, H - 1)), 3, 1)
-        d.y = -rand() * 20
-        d.x = rand() * (W + 60)
+        ctx.fillRect(Math.round(d.x) - P, Math.round(Math.min(d.y, H - 1)), 3 * P, 1)
+        d.y = -rand() * 20 * P
+        d.x = rand() * (W + 60 * P)
       }
-      for (let k = 0; k < d.l; k++) ctx.fillRect(Math.round(d.x + k * 0.25), Math.round(d.y - k), 1, 1)
+      for (let k = 0; k < d.l; k += 4) ctx.fillRect(Math.round(d.x + k * 0.25), Math.round(d.y - k - 3), 1, 4)
+
     }
     // lightning
     this.nextBolt -= dt

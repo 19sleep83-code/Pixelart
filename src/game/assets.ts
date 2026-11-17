@@ -1,7 +1,7 @@
 // Every sprite the game draws, rendered once from the voxel models while the loading bar runs.
 
 import { Rot, renderSprite, renderShadow, makeCanvas, toSprite, type Sprite, type Vox } from '../core/voxel'
-import { toABGR, mix, shade, KZ } from '../core/iso'
+import { toABGR, mix, shade, KZ, SCALE } from '../core/iso'
 import { hash2 } from '../core/rng'
 import { unitModel, buildingModel, treeModel, houseModel, oreModel, titleModel } from './models'
 import type { Faction } from './colors'
@@ -103,13 +103,13 @@ export function mountOffset(mount: [number, number, number], yaw: number): [numb
   const [a, b, c] = mount
   const rx = -a * Math.sin(yaw) + b * Math.cos(yaw)
   const ry = a * Math.cos(yaw) + b * Math.sin(yaw)
-  return [rx - ry, (rx + ry) * 0.5 - c * KZ]
+  return [(rx - ry) * SCALE, (rx + ry) * 0.5 * SCALE - c * KZ]
 }
 
 function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 'scorch' | 'rubble'> {
   const FIRE = [0xfffbe0, 0xffe07a, 0xffb13a, 0xf07a26, 0xc4461c, 0x7a2c18].map((c) => c)
   const explosions: Sprite[][] = []
-  for (const R of [5, 9, 15, 24]) {
+  for (const R of [5, 9, 15, 24].map((r) => r * SCALE)) {
     const frames: Sprite[] = []
     const F = 14
     for (let f = 0; f < F; f++) {
@@ -148,7 +148,8 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 
   const soot: Sprite[] = []
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
   for (const [list, cols] of [[smoke, [0xc8c6c0, 0x8a8782, 0xa9a6a0]], [dust, [0xc8b48c, 0x8a7656, 0xa89470]], [soot, [0x6e6a64, 0x2e2b28, 0x4a4642]]] as [Sprite[], number[]][])
-  for (let r = 1; r <= 9; r++) {
+  for (let i = 1; i <= (list === soot ? 14 : 9); i++) {
+    const r = list === soot ? i * 3 * SCALE : i * SCALE
     const S = r * 2 + 3
     const px = new Uint32Array(S * S)
     for (let y = 0; y < S; y++)
@@ -157,8 +158,11 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 
         const d = Math.hypot(dx, dy) / (r + 0.3)
         if (d > 1) continue
         const lit = dy < -r * 0.3 || dx < -r * 0.4
-        const c = lit ? cols[0] : d > 0.75 ? cols[1] : cols[2]
-        if (d > 0.8 && BAYER[(y & 3) * 4 + (x & 3)] < 8) continue
+        // a lumpy edge and a few darker curls inside
+        const lump = hash2(x >> 2, y >> 2, r) * 0.18
+        if (d > 0.88 - lump) continue
+        const c = lit ? cols[0] : d > 0.7 ? cols[1] : hash2(x >> 1, y >> 1, r + 5) < 0.15 ? cols[1] : cols[2]
+        if (d > 0.75 && BAYER[(y & 3) * 4 + (x & 3)] < 8) continue
         px[y * S + x] = toABGR(c)
       }
     list.push(toSprite(px, S, S, S >> 1, S >> 1))
@@ -166,29 +170,29 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 
   // small flames for burning wrecks and buildings
   const fire: Sprite[] = []
   for (let f = 0; f < 6; f++) {
-    const W = 7, H = 11
+    const W = 7 * SCALE, H = 11 * SCALE
     const px = new Uint32Array(W * H)
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
-        const dx = (x - 3) / 3.2
+        const dx = (x - W / 2 + 0.5) / (3.2 * SCALE)
         const v = 1 - y / H
         const w = (1 - v) * 1.1 + 0.15
-        const n = hash2(x, y + f * 3, 91)
+        const n = hash2(x >> 1, (y >> 1) + f * 3, 91)
         if (Math.abs(dx) > w - n * 0.3) continue
         const heat = 1 - v - Math.abs(dx) * 0.4 + n * 0.2
         px[y * W + x] = toABGR(heat > 0.85 ? 0xfff0b0 : heat > 0.6 ? 0xffc040 : heat > 0.35 ? 0xf07a20 : 0xb83a18)
       }
-    fire.push(toSprite(px, W, H, 3, H - 1))
+    fire.push(toSprite(px, W, H, W >> 1, H - 1))
   }
   // scorch marks and rubble for the ground
   const scorch: Sprite[] = []
-  for (const R of [5, 9, 14]) {
+  for (const R of [5, 9, 14].map((r) => r * SCALE)) {
     const W = R * 4 + 2, H = R * 2 + 2
     const px = new Uint32Array(W * H)
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
         const d = Math.hypot((x - W / 2) / (R * 2), (y - H / 2) / R)
-        const n = hash2(x, y, R)
+        const n = hash2(x >> 1, y >> 1, R)
         if (d + n * 0.3 > 1) continue
         px[y * W + x] = toABGR(d < 0.45 ? 0x1e1b17 : 0x2e2a22, Math.round(200 - d * 120))
       }
@@ -196,13 +200,13 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 
   }
   const rubble: Sprite[] = []
   for (const T of [1, 2, 3]) {
-    const W = T * 32 + 4, H = T * 16 + 4
+    const W = T * 32 * SCALE + 4, H = T * 16 * SCALE + 4
     const px = new Uint32Array(W * H)
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
         const d = Math.abs(x - W / 2) / (W / 2) + Math.abs(y - H / 2) / (H / 2)
         if (d > 0.98) continue
-        const n = hash2(x >> 1, y, T * 3)
+        const n = hash2(x >> 2, y >> 1, T * 3)
         const c = n < 0.35 ? 0x3a3631 : n < 0.6 ? 0x6e6a62 : n < 0.8 ? 0x8a867c : 0x4a443c
         px[y * W + x] = toABGR(c, d > 0.8 ? 170 : 235)
       }
