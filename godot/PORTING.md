@@ -46,8 +46,13 @@ Regeln, damit alle Teile zusammenpassen.
 Godot: `/tmp/claude-0/-home-user-Pixelart/3bb0c800-0ee2-564d-80a3-1ee820e0ddef/scratchpad/godot_bin/Godot_v4.7.2-stable_linux.x86_64`
 (nur in dieser Entwicklungsumgebung; auf dem PC das normale Godot 4.7).
 
-- Testskripte in `godot/tests/*.gd`, `extends SceneTree`, Arbeit im ersten `_process` (dort sind die
-  Autoloads bereit), `return true` beendet. Aufruf: `godot --headless --path godot -s tests/<name>.gd`.
+- **Tests mit Autoloads (Data, Sound):** Skript `godot/tests/<name>.gd`, `extends Node`, mit
+  `func run(args: PackedStringArray) -> void` (darf `await`), gestartet über die Testszene:
+  `godot --headless --path godot res://tests/runner.tscn -- <name> [args …]`.
+  (Unter `-s` kennt GDScript die Autoload-Namen nicht; dort nur Skripte ohne `Data`/`Sound`, Arbeit im ersten
+  `_process`, nie `quit()` in `_initialize`.)
+- Wegen `pass` als Schlüsselwort heißt der Parameter des PathFinders `pass_` (Feld `pass_fn`).
+  Distanzen wie im Prototyp mit `Rng.hypot` (V8-genau), Rundung wie JS mit `Rng.js_round`.
 - Gleichheit mit dem Prototyp prüfen: TS-Seite mit `node_modules/.bin/esbuild <datei.ts> --bundle
   --platform=node` bauen und dieselben Prüfsummen ausgeben.
 - Bilder: `xvfb-run -a godot --path godot --rendering-driver opengl3 …` und im Skript
