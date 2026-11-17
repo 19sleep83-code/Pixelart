@@ -1,0 +1,86 @@
+{
+ "startCredits": 5000,
+ "harvestLoad": 500,
+ "orePerTile": 900,
+ "mineAmount": 50,
+ "mineInterval": 0.5,
+ "unloadSeconds": 2.2,
+ "buildRadius": 5,
+ "sellRefund": 0.5,
+ "repairSeconds": 25,
+ "repairCostShare": 0.3,
+ "lowPowerProduction": 0.45,
+ "lowPowerDefenseRate": 0.5,
+ "extraProducerSpeed": 0.5,
+ "buildingRiseSeconds": 1.6,
+ "brokeTrickle": {
+  "perSecond": 8,
+  "below": 1000
+ },
+ "ranks": {
+  "kills": [
+   3,
+   7,
+   12
+  ],
+  "names": [
+   "Rekrut",
+   "Gefreiter",
+   "Feldwebel",
+   "Veteran"
+  ],
+  "damageBonus": 0.12,
+  "armorBonus": 0.07,
+  "promoteHeal": 0.25,
+  "veteranRegen": 0.01
+ },
+ "damageRandom": [
+  0.9,
+  1.1
+ ],
+ "splashFalloff": 0.6,
+ "jetRearmSeconds": 6,
+ "carrierRebuildSeconds": 22,
+ "carrierStrikeRange": 17,
+ "sniperHideAfter": 2.5,
+ "sniperSpottedWithin": 2.2,
+ "aiDifficulty": {
+  "production": [
+   0.8,
+   1,
+   1.25
+  ],
+  "income": [
+   0.75,
+   1,
+   1.3
+  ]
+ },
+ "garrison": {
+  "house": {
+   "cap": 4,
+   "range": 1.5,
+   "sight": 2,
+   "name": "Wohnhaus"
+  },
+  "barn": {
+   "cap": 3,
+   "range": 1,
+   "sight": 1.5,
+   "name": "Scheune"
+  },
+  "church": {
+   "cap": 6,
+   "range": 2.5,
+   "sight": 4,
+   "name": "Kirche"
+  },
+  "bunker": {
+   "cap": 3,
+   "range": 1,
+   "sight": 1,
+   "name": "MG-Bunker"
+  }
+ },
+ "cover": 0.3
+}

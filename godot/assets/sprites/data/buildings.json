@@ -1,0 +1,216 @@
+{
+ "order": [
+  "hq",
+  "power",
+  "ref",
+  "barracks",
+  "factory",
+  "radar",
+  "shipyard",
+  "helipad",
+  "airfield",
+  "bunker",
+  "rocket"
+ ],
+ "buildings": {
+  "hq": {
+   "key": "hq",
+   "name": "Hauptquartier",
+   "desc": "Baut alle Gebäude.",
+   "cost": 3000,
+   "time": 30,
+   "hp": 2200,
+   "w": 3,
+   "h": 3,
+   "power": 20,
+   "sight": 8,
+   "req": [
+    "__never"
+   ],
+   "produces": "build"
+  },
+  "power": {
+   "key": "power",
+   "name": "Kraftwerk",
+   "desc": "Liefert Strom. Ohne Strom läuft alles langsamer.",
+   "cost": 300,
+   "time": 6,
+   "hp": 650,
+   "w": 2,
+   "h": 2,
+   "power": 100,
+   "sight": 4,
+   "req": [
+    "hq"
+   ]
+  },
+  "ref": {
+   "key": "ref",
+   "name": "Rohstoffdepot",
+   "desc": "Nimmt Erz an. Mit einem Erzlaster.",
+   "cost": 1600,
+   "time": 12,
+   "hp": 1100,
+   "w": 3,
+   "h": 3,
+   "power": -30,
+   "sight": 5,
+   "req": [
+    "power"
+   ]
+  },
+  "barracks": {
+   "key": "barracks",
+   "name": "Kaserne",
+   "desc": "Bildet Infanterie aus.",
+   "cost": 400,
+   "time": 7,
+   "hp": 750,
+   "w": 2,
+   "h": 2,
+   "power": -20,
+   "sight": 5,
+   "req": [
+    "power"
+   ],
+   "produces": "inf"
+  },
+  "factory": {
+   "key": "factory",
+   "name": "Fahrzeugwerk",
+   "desc": "Baut Fahrzeuge.",
+   "cost": 1800,
+   "time": 14,
+   "hp": 1500,
+   "w": 3,
+   "h": 3,
+   "power": -30,
+   "sight": 5,
+   "req": [
+    "ref"
+   ],
+   "produces": "veh"
+  },
+  "radar": {
+   "key": "radar",
+   "name": "Radarstation",
+   "desc": "Schaltet Artillerie, Flak, Scharfschützen und Zerstörer frei. Große Sicht.",
+   "cost": 900,
+   "time": 10,
+   "hp": 900,
+   "w": 2,
+   "h": 2,
+   "power": -40,
+   "sight": 10,
+   "req": [
+    "factory"
+   ]
+  },
+  "shipyard": {
+   "key": "shipyard",
+   "name": "Werft",
+   "desc": "Baut Schiffe. Muss am Ufer stehen, darf weiter von der Basis entfernt sein.",
+   "cost": 1200,
+   "time": 12,
+   "hp": 1300,
+   "w": 3,
+   "h": 3,
+   "power": -25,
+   "sight": 7,
+   "req": [
+    "ref"
+   ],
+   "produces": "sea",
+   "shore": true,
+   "reach": 14
+  },
+  "helipad": {
+   "key": "helipad",
+   "name": "Hubschrauberplatz",
+   "desc": "Baut Kampfhubschrauber.",
+   "cost": 1200,
+   "time": 11,
+   "hp": 850,
+   "w": 2,
+   "h": 2,
+   "power": -20,
+   "sight": 5,
+   "req": [
+    "radar"
+   ],
+   "produces": "air"
+  },
+  "airfield": {
+   "key": "airfield",
+   "name": "Flugfeld",
+   "desc": "Baut Kampfjets und bietet drei Stellplätze zum Aufmunitionieren.",
+   "cost": 1800,
+   "time": 15,
+   "hp": 1300,
+   "w": 4,
+   "h": 3,
+   "power": -40,
+   "sight": 6,
+   "req": [
+    "radar"
+   ],
+   "produces": "air",
+   "slots": 3
+  },
+  "bunker": {
+   "key": "bunker",
+   "name": "MG-Bunker",
+   "desc": "Verteidigung gegen Infanterie und leichte Fahrzeuge. Bis zu 3 Soldaten können einsteigen und mitschießen.",
+   "cost": 500,
+   "time": 7,
+   "hp": 800,
+   "w": 1,
+   "h": 1,
+   "power": -10,
+   "sight": 6,
+   "weapon": {
+    "cls": "auto",
+    "proj": "bullet",
+    "dmg": 15,
+    "range": 5.5,
+    "reload": 0.9,
+    "burst": 4,
+    "gap": 0.1,
+    "ground": true,
+    "air": false
+   },
+   "req": [
+    "barracks"
+   ],
+   "defense": true,
+   "garrison": 3
+  },
+  "rocket": {
+   "key": "rocket",
+   "name": "Raketenstellung",
+   "desc": "Verteidigung gegen Panzer, Schiffe, Hubschrauber und Jets.",
+   "cost": 750,
+   "time": 9,
+   "hp": 600,
+   "w": 1,
+   "h": 1,
+   "power": -20,
+   "sight": 7,
+   "weapon": {
+    "cls": "rocket",
+    "proj": "rocket",
+    "dmg": 50,
+    "range": 7,
+    "reload": 2.4,
+    "burst": 2,
+    "gap": 0.25,
+    "ground": true,
+    "air": true
+   },
+   "req": [
+    "factory"
+   ],
+   "defense": true
+  }
+ }
+}

@@ -1,0 +1,36 @@
+; Pixelfront – Godot 4 project
+
+config_version=5
+
+[application]
+
+config/name="Pixelfront"
+config/description="Isometrisches Pixel-RTS: NATO gegen Russland"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://assets/sprites/ui/icons/build@3x.png"
+
+[autoload]
+
+Data="*res://scripts/data.gd"
+Sound="*res://scripts/sound.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/size/resizable=true
+window/stretch/mode="disabled"
+window/handheld/orientation=0
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=false
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+2d/snap/snap_2d_transforms_to_pixel=true
+environment/defaults/default_clear_color=Color(0.055, 0.067, 0.047, 1)

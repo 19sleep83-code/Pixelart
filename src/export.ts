@@ -195,6 +195,7 @@ async function exportAll(A: Assets, log: (s: string) => void) {
         mountOffsets: art.turret ? Array.from({ length: 32 }, (_, i) => mountOffset(art.mount, (i / 32) * Math.PI * 2).map((v) => Math.round(v * 100) / 100)) : undefined,
         muzzle: art.muzzle,
         rotor: art.rotor,
+        burner: art.burner,
         hull: d.hull,
         radius: d.radius,
         planned: d.planned,

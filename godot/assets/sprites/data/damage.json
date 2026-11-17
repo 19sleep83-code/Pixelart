@@ -1,0 +1,77 @@
+{
+ "note": "Schaden = Waffe × table[Waffenart][Panzerung]",
+ "table": {
+  "mg": {
+   "inf": 1,
+   "light": 0.2,
+   "heavy": 0.05,
+   "bld": 0.2,
+   "air": 0.06,
+   "ship": 0.15
+  },
+  "cannon": {
+   "inf": 0.45,
+   "light": 1,
+   "heavy": 0.9,
+   "bld": 0.75,
+   "air": 0,
+   "ship": 0.8
+  },
+  "auto": {
+   "inf": 0.85,
+   "light": 0.8,
+   "heavy": 0.25,
+   "bld": 0.35,
+   "air": 0.25,
+   "ship": 0.6
+  },
+  "rocket": {
+   "inf": 0.3,
+   "light": 1,
+   "heavy": 1,
+   "bld": 0.65,
+   "air": 0.9,
+   "ship": 0.8
+  },
+  "art": {
+   "inf": 0.9,
+   "light": 0.7,
+   "heavy": 0.45,
+   "bld": 1,
+   "air": 0,
+   "ship": 0.7
+  },
+  "flak": {
+   "inf": 0.4,
+   "light": 0.3,
+   "heavy": 0.1,
+   "bld": 0.15,
+   "air": 1.5,
+   "ship": 0.15
+  },
+  "sniper": {
+   "inf": 1.6,
+   "light": 0.05,
+   "heavy": 0.02,
+   "bld": 0.02,
+   "air": 0,
+   "ship": 0.02
+  },
+  "missile": {
+   "inf": 0.5,
+   "light": 1,
+   "heavy": 1,
+   "bld": 1,
+   "air": 0.8,
+   "ship": 1.1
+  }
+ },
+ "armorNames": {
+  "inf": "Infanterie",
+  "light": "leicht gepanzert",
+  "heavy": "schwer gepanzert",
+  "bld": "Gebäude",
+  "air": "Luftfahrzeug",
+  "ship": "Schiff"
+ }
+}

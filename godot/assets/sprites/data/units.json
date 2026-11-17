@@ -1,0 +1,901 @@
+{
+ "note": "Werte gelten für beide Fraktionen; Namen und Rollenbezeichnung je Fraktion unter names. planned = nur für Godot vorbereitet.",
+ "order": [
+  "rifle",
+  "at",
+  "sniper",
+  "engineer",
+  "harv",
+  "scout",
+  "ifv",
+  "mbt",
+  "aa",
+  "art",
+  "mlrs",
+  "heli",
+  "jet",
+  "boat",
+  "corvette",
+  "destroyer",
+  "lander",
+  "carrier"
+ ],
+ "planned": [
+  "mortar",
+  "medic",
+  "fighter",
+  "cas"
+ ],
+ "plannedChanges": {
+  "jet": "Wird in der Godot-Version durch zwei Flugzeuge ersetzt: fighter (Jäger, nur Luftziele; russisch Su-35 statt Su-34) und cas (Erdkampf: A-10 / Su-25, ein Anflug gegen Boden- und Seeziele). Beide teilen sich die 3 Stellplätze je Flugfeld."
+ },
+ "units": {
+  "rifle": {
+   "key": "rifle",
+   "desc": "Günstige Infanterie. Stark gegen Infanterie.",
+   "cost": 100,
+   "time": 4,
+   "hp": 55,
+   "armor": "inf",
+   "speed": 0.85,
+   "turn": 0,
+   "sight": 6,
+   "radius": 0.2,
+   "weapon": {
+    "cls": "mg",
+    "proj": "bullet",
+    "dmg": 9,
+    "range": 4,
+    "reload": 0.9,
+    "burst": 3,
+    "gap": 0.12,
+    "ground": true,
+    "air": true
+   },
+   "queue": "inf",
+   "producer": "barracks",
+   "req": [
+    "barracks"
+   ],
+   "infantry": true
+  },
+  "at": {
+   "key": "at",
+   "desc": "Raketen gegen Fahrzeuge, Schiffe und Hubschrauber.",
+   "cost": 220,
+   "time": 6,
+   "hp": 60,
+   "armor": "inf",
+   "speed": 0.75,
+   "turn": 0,
+   "sight": 6,
+   "radius": 0.2,
+   "weapon": {
+    "cls": "rocket",
+    "proj": "rocket",
+    "dmg": 68,
+    "range": 5.5,
+    "reload": 2.6,
+    "ground": true,
+    "air": true
+   },
+   "queue": "inf",
+   "producer": "barracks",
+   "req": [
+    "barracks"
+   ],
+   "infantry": true
+  },
+  "sniper": {
+   "key": "sniper",
+   "desc": "Trifft Infanterie auf große Entfernung. Unsichtbar, solange er stillhält und nicht schießt.",
+   "cost": 350,
+   "time": 9,
+   "hp": 50,
+   "armor": "inf",
+   "speed": 0.8,
+   "turn": 0,
+   "sight": 10,
+   "radius": 0.2,
+   "weapon": {
+    "cls": "sniper",
+    "proj": "snipe",
+    "dmg": 60,
+    "range": 9,
+    "reload": 2.8,
+    "ground": true,
+    "air": false,
+    "sea": false
+   },
+   "queue": "inf",
+   "producer": "barracks",
+   "req": [
+    "barracks",
+    "radar"
+   ],
+   "infantry": true,
+   "stealth": true
+  },
+  "engineer": {
+   "key": "engineer",
+   "desc": "Erobert feindliche Gebäude: Rechtsklick auf das Gebäude. Wird dabei verbraucht. Ohne Waffe.",
+   "cost": 500,
+   "time": 8,
+   "hp": 60,
+   "armor": "inf",
+   "speed": 0.9,
+   "turn": 0,
+   "sight": 5,
+   "radius": 0.2,
+   "queue": "inf",
+   "producer": "barracks",
+   "req": [
+    "barracks"
+   ],
+   "infantry": true,
+   "engineer": true
+  },
+  "harv": {
+   "key": "harv",
+   "desc": "Sammelt Erz und bringt es zum Rohstoffdepot.",
+   "cost": 1000,
+   "time": 12,
+   "hp": 650,
+   "armor": "light",
+   "speed": 1.15,
+   "turn": 3.2,
+   "sight": 4,
+   "radius": 0.56,
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory",
+    "ref"
+   ],
+   "harvester": true
+  },
+  "scout": {
+   "key": "scout",
+   "desc": "Sehr schnell und weitsichtig. Leichte Maschinenkanone gegen Infanterie und leichte Fahrzeuge. Zum Aufklären und Jagen von Artillerie.",
+   "cost": 400,
+   "time": 6,
+   "hp": 220,
+   "armor": "light",
+   "speed": 2.7,
+   "turn": 4.2,
+   "sight": 10,
+   "radius": 0.48,
+   "weapon": {
+    "cls": "auto",
+    "proj": "bullet",
+    "dmg": 5,
+    "range": 5,
+    "reload": 1,
+    "burst": 4,
+    "gap": 0.09,
+    "ground": true,
+    "air": false
+   },
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory"
+   ]
+  },
+  "ifv": {
+   "key": "ifv",
+   "desc": "Schnell, Maschinenkanone. Gut gegen Infanterie und leichte Fahrzeuge.",
+   "cost": 550,
+   "time": 9,
+   "hp": 320,
+   "armor": "light",
+   "speed": 2,
+   "turn": 3.6,
+   "sight": 7,
+   "radius": 0.55,
+   "weapon": {
+    "cls": "auto",
+    "proj": "shell",
+    "dmg": 13,
+    "range": 5,
+    "reload": 0.9,
+    "burst": 3,
+    "gap": 0.14,
+    "ground": true,
+    "air": true
+   },
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory"
+   ]
+  },
+  "mbt": {
+   "key": "mbt",
+   "desc": "Schwer gepanzert, starke Kanone. Das Rückgrat jeder Panzertruppe.",
+   "cost": 900,
+   "time": 13,
+   "hp": 660,
+   "armor": "heavy",
+   "speed": 1.4,
+   "turn": 2.2,
+   "sight": 7,
+   "radius": 0.58,
+   "weapon": {
+    "cls": "cannon",
+    "proj": "shell",
+    "dmg": 75,
+    "range": 5.75,
+    "reload": 2.8,
+    "ground": true,
+    "air": false
+   },
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory"
+   ]
+  },
+  "aa": {
+   "key": "aa",
+   "desc": "Holt Hubschrauber und Jets vom Himmel. Hilft gegen Infanterie.",
+   "cost": 700,
+   "time": 10,
+   "hp": 300,
+   "armor": "light",
+   "speed": 1.6,
+   "turn": 3,
+   "sight": 8,
+   "radius": 0.56,
+   "weapon": {
+    "cls": "flak",
+    "proj": "flak",
+    "dmg": 16,
+    "range": 6.25,
+    "reload": 0.75,
+    "burst": 4,
+    "gap": 0.085,
+    "ground": true,
+    "air": true
+   },
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory",
+    "radar"
+   ]
+  },
+  "art": {
+   "key": "art",
+   "desc": "Panzerhaubitze: große Reichweite und Flächenschaden, schießt Doppelschüsse. Braucht Schutz, nicht zu nah ans Ziel.",
+   "cost": 1000,
+   "time": 14,
+   "hp": 290,
+   "armor": "light",
+   "speed": 1.12,
+   "turn": 2.2,
+   "sight": 6,
+   "radius": 0.58,
+   "weapon": {
+    "cls": "art",
+    "proj": "art",
+    "dmg": 135,
+    "range": 12,
+    "minRange": 3,
+    "reload": 5.75,
+    "burst": 2,
+    "gap": 0.5,
+    "splash": 1.3,
+    "ground": true,
+    "air": false
+   },
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory",
+    "radar"
+   ]
+  },
+  "mlrs": {
+   "key": "mlrs",
+   "desc": "Raketenwerfer: setzt ganze Flächen mit einer Salve unter Feuer, lädt lange nach. Leicht gepanzert.",
+   "cost": 1050,
+   "time": 16,
+   "hp": 260,
+   "armor": "light",
+   "speed": 1.27,
+   "turn": 2.2,
+   "sight": 6,
+   "radius": 0.58,
+   "weapon": {
+    "cls": "art",
+    "proj": "mlrs",
+    "dmg": 49,
+    "range": 12.5,
+    "minRange": 3.5,
+    "reload": 7.5,
+    "burst": 8,
+    "gap": 0.17,
+    "splash": 1.1,
+    "ground": true,
+    "air": false
+   },
+   "queue": "veh",
+   "producer": "factory",
+   "req": [
+    "factory",
+    "radar"
+   ]
+  },
+  "heli": {
+   "key": "heli",
+   "desc": "Fliegt über alles hinweg. Raketen gegen Fahrzeuge und Schiffe.",
+   "cost": 1300,
+   "time": 15,
+   "hp": 390,
+   "armor": "air",
+   "speed": 2.6,
+   "turn": 2.6,
+   "sight": 8,
+   "radius": 0.6,
+   "weapon": {
+    "cls": "rocket",
+    "proj": "rocket",
+    "dmg": 46,
+    "range": 5,
+    "reload": 2.2,
+    "burst": 2,
+    "gap": 0.2,
+    "ground": true,
+    "air": false
+   },
+   "queue": "air",
+   "producer": "helipad",
+   "req": [
+    "helipad"
+   ],
+   "air": true
+  },
+  "jet": {
+   "key": "jet",
+   "desc": "Startet vom Flugfeld zu einem Luftschlag auf ein Ziel und kehrt zum Aufmunitionieren zurück.",
+   "cost": 1500,
+   "time": 16,
+   "hp": 260,
+   "armor": "air",
+   "speed": 7,
+   "turn": 2.6,
+   "sight": 7,
+   "radius": 0.55,
+   "weapon": {
+    "cls": "missile",
+    "proj": "missile",
+    "dmg": 92,
+    "range": 6,
+    "reload": 6,
+    "burst": 2,
+    "gap": 0.22,
+    "splash": 0.7,
+    "ground": true,
+    "air": false,
+    "sea": true
+   },
+   "queue": "air",
+   "producer": "airfield",
+   "req": [
+    "airfield"
+   ],
+   "air": true,
+   "jet": true
+  },
+  "boat": {
+   "key": "boat",
+   "desc": "Schnell und wendig, Maschinenkanone. Unterläuft die Raketen großer Schiffe, unterliegt aber Korvetten. Leicht gepanzert.",
+   "cost": 500,
+   "time": 7,
+   "hp": 260,
+   "armor": "light",
+   "speed": 2.9,
+   "turn": 3,
+   "sight": 8,
+   "radius": 0.55,
+   "weapon": {
+    "cls": "auto",
+    "proj": "shell",
+    "dmg": 11,
+    "range": 5.5,
+    "reload": 0.9,
+    "burst": 4,
+    "gap": 0.08,
+    "ground": true,
+    "air": true
+   },
+   "queue": "sea",
+   "producer": "shipyard",
+   "req": [
+    "shipyard"
+   ],
+   "naval": true,
+   "hull": [
+    1,
+    0.31
+   ]
+  },
+  "corvette": {
+   "key": "corvette",
+   "desc": "Allrounder mit Schnellfeuerkanone gegen Schiffe, Ufer und Luft.",
+   "cost": 1000,
+   "time": 12,
+   "hp": 620,
+   "armor": "ship",
+   "speed": 2,
+   "turn": 1.8,
+   "sight": 9,
+   "radius": 0.75,
+   "weapon": {
+    "cls": "auto",
+    "proj": "shell",
+    "dmg": 24,
+    "range": 7,
+    "reload": 1.6,
+    "burst": 3,
+    "gap": 0.2,
+    "ground": true,
+    "air": true
+   },
+   "queue": "sea",
+   "producer": "shipyard",
+   "req": [
+    "shipyard"
+   ],
+   "naval": true,
+   "hull": [
+    1.38,
+    0.41
+   ]
+  },
+  "destroyer": {
+   "key": "destroyer",
+   "desc": "Marschflugkörper mit großer Reichweite gegen Ziele an Land und auf See.",
+   "cost": 1900,
+   "time": 18,
+   "hp": 1075,
+   "armor": "ship",
+   "speed": 1.5,
+   "turn": 1.2,
+   "sight": 10,
+   "radius": 1,
+   "weapon": {
+    "cls": "missile",
+    "proj": "missile",
+    "dmg": 117,
+    "range": 13.5,
+    "minRange": 6,
+    "reload": 5.5,
+    "burst": 2,
+    "gap": 0.45,
+    "splash": 0.9,
+    "ground": true,
+    "air": false,
+    "sea": true
+   },
+   "queue": "sea",
+   "producer": "shipyard",
+   "req": [
+    "shipyard",
+    "radar"
+   ],
+   "naval": true,
+   "hull": [
+    1.88,
+    0.52
+   ]
+  },
+  "lander": {
+   "key": "lander",
+   "desc": "Bringt bis zu 5 Bodeneinheiten über das Wasser. Einladen: Einheiten wählen, Rechtsklick aufs Schiff.",
+   "cost": 700,
+   "time": 9,
+   "hp": 520,
+   "armor": "ship",
+   "speed": 1.9,
+   "turn": 2,
+   "sight": 6,
+   "radius": 0.8,
+   "queue": "sea",
+   "producer": "shipyard",
+   "req": [
+    "shipyard"
+   ],
+   "naval": true,
+   "hull": [
+    1.12,
+    0.47
+   ],
+   "transport": 5
+  },
+  "carrier": {
+   "key": "carrier",
+   "desc": "Trägt drei eigene Jets, die selbstständig Ziele in weitem Umkreis angreifen. Flak zur Selbstverteidigung.",
+   "cost": 3200,
+   "time": 30,
+   "hp": 1900,
+   "armor": "ship",
+   "speed": 1.1,
+   "turn": 0.8,
+   "sight": 11,
+   "radius": 1.5,
+   "weapon": {
+    "cls": "flak",
+    "proj": "flak",
+    "dmg": 12,
+    "range": 6,
+    "reload": 0.9,
+    "burst": 4,
+    "gap": 0.08,
+    "ground": false,
+    "air": true,
+    "sea": false
+   },
+   "queue": "sea",
+   "producer": "shipyard",
+   "req": [
+    "shipyard",
+    "airfield"
+   ],
+   "naval": true,
+   "hull": [
+    2.62,
+    0.8
+   ],
+   "carrier": 3
+  },
+  "mortar": {
+   "key": "mortar",
+   "desc": "Leichte Artillerie der Infanterie: Steilfeuer über Häuser und Wälder, Flächenschaden gegen Infanterie und leichte Fahrzeuge. Nicht zu nah ans Ziel.",
+   "cost": 450,
+   "time": 9,
+   "hp": 60,
+   "armor": "inf",
+   "speed": 0.65,
+   "turn": 0,
+   "sight": 6,
+   "radius": 0.22,
+   "weapon": {
+    "cls": "art",
+    "proj": "art",
+    "dmg": 75,
+    "range": 9,
+    "minRange": 2.5,
+    "reload": 3.6,
+    "splash": 1.2,
+    "ground": true,
+    "air": false
+   },
+   "queue": "inf",
+   "producer": "barracks",
+   "req": [
+    "barracks",
+    "radar"
+   ],
+   "infantry": true,
+   "planned": true
+  },
+  "medic": {
+   "key": "medic",
+   "desc": "Heilt verwundete Soldaten in der Nähe. Ohne Waffe.",
+   "cost": 250,
+   "time": 6,
+   "hp": 60,
+   "armor": "inf",
+   "speed": 0.9,
+   "turn": 0,
+   "sight": 6,
+   "radius": 0.2,
+   "queue": "inf",
+   "producer": "barracks",
+   "req": [
+    "barracks"
+   ],
+   "infantry": true,
+   "heal": {
+    "rate": 6,
+    "range": 2.5
+   },
+   "planned": true
+  },
+  "fighter": {
+   "key": "fighter",
+   "desc": "Luftüberlegenheit: fängt Hubschrauber und Flugzeuge ab, greift keine Bodenziele an. Startet auf Befehl oder bei Feindflugzeugen nahe der Basis und kehrt zum Aufmunitionieren zurück.",
+   "cost": 1500,
+   "time": 16,
+   "hp": 260,
+   "armor": "air",
+   "speed": 7.5,
+   "turn": 2.8,
+   "sight": 9,
+   "radius": 0.55,
+   "weapon": {
+    "cls": "missile",
+    "proj": "missile",
+    "dmg": 95,
+    "range": 8,
+    "reload": 5,
+    "burst": 2,
+    "gap": 0.3,
+    "ground": false,
+    "air": true,
+    "sea": false
+   },
+   "queue": "air",
+   "producer": "airfield",
+   "req": [
+    "airfield"
+   ],
+   "air": true,
+   "jet": true,
+   "planned": true
+  },
+  "cas": {
+   "key": "cas",
+   "desc": "Panzerknacker: ein Tiefflug-Anflug mit Bordkanone und Raketen auf ein Bodenziel oder Schiff, dann zurück zum Flugfeld. Stark gepanzert, langsamer als ein Jäger.",
+   "cost": 1600,
+   "time": 18,
+   "hp": 480,
+   "armor": "air",
+   "speed": 4.5,
+   "turn": 2.2,
+   "sight": 7,
+   "radius": 0.6,
+   "weapon": {
+    "cls": "cannon",
+    "proj": "shell",
+    "dmg": 42,
+    "range": 6,
+    "reload": 6,
+    "burst": 8,
+    "gap": 0.06,
+    "splash": 0.3,
+    "ground": true,
+    "air": false,
+    "sea": true
+   },
+   "queue": "air",
+   "producer": "airfield",
+   "req": [
+    "airfield"
+   ],
+   "air": true,
+   "jet": true,
+   "planned": true
+  }
+ },
+ "names": {
+  "nato": {
+   "rifle": {
+    "name": "Grenadier (G36)",
+    "role": "Infanterie"
+   },
+   "at": {
+    "name": "Panzerfaust 3",
+    "role": "Panzerabwehrtrupp"
+   },
+   "sniper": {
+    "name": "Scharfschütze (G22)",
+    "role": "Scharfschütze"
+   },
+   "engineer": {
+    "name": "Pionier",
+    "role": "Pionier"
+   },
+   "harv": {
+    "name": "MAN-Erzlaster",
+    "role": "Erzlaster"
+   },
+   "scout": {
+    "name": "Fennek",
+    "role": "Spähwagen"
+   },
+   "ifv": {
+    "name": "Marder 1A5",
+    "role": "Schützenpanzer"
+   },
+   "mbt": {
+    "name": "Leopard 2A6",
+    "role": "Kampfpanzer"
+   },
+   "aa": {
+    "name": "Gepard 1A2",
+    "role": "Flakpanzer"
+   },
+   "art": {
+    "name": "Panzerhaubitze 2000",
+    "role": "Rohrartillerie"
+   },
+   "mlrs": {
+    "name": "MARS II",
+    "role": "Raketenartillerie"
+   },
+   "heli": {
+    "name": "AH-64 Apache",
+    "role": "Kampfhubschrauber"
+   },
+   "jet": {
+    "name": "Eurofighter",
+    "role": "Kampfjet"
+   },
+   "boat": {
+    "name": "Schnellboot S143",
+    "role": "Patrouillenboot"
+   },
+   "corvette": {
+    "name": "Korvette K130",
+    "role": "Korvette"
+   },
+   "destroyer": {
+    "name": "Arleigh Burke",
+    "role": "Zerstörer"
+   },
+   "lander": {
+    "name": "LCU 1700",
+    "role": "Landungsschiff"
+   },
+   "carrier": {
+    "name": "Nimitz",
+    "role": "Flugzeugträger"
+   },
+   "mortar": {
+    "name": "Mörsertrupp (120 mm)",
+    "role": "Mörsertrupp"
+   },
+   "medic": {
+    "name": "Sanitäter",
+    "role": "Sanitäter"
+   },
+   "fighter": {
+    "name": "Eurofighter Typhoon",
+    "role": "Jagdflugzeug"
+   },
+   "cas": {
+    "name": "A-10 Thunderbolt II",
+    "role": "Erdkampfflugzeug"
+   }
+  },
+  "ru": {
+   "rifle": {
+    "name": "Schütze (AK-74)",
+    "role": "Infanterie"
+   },
+   "at": {
+    "name": "RPG-7",
+    "role": "Panzerabwehrtrupp"
+   },
+   "sniper": {
+    "name": "Scharfschütze (SWD)",
+    "role": "Scharfschütze"
+   },
+   "engineer": {
+    "name": "Pionier (Sapjor)",
+    "role": "Pionier"
+   },
+   "harv": {
+    "name": "KAMAZ-Erzlaster",
+    "role": "Erzlaster"
+   },
+   "scout": {
+    "name": "BRDM-2",
+    "role": "Spähwagen"
+   },
+   "ifv": {
+    "name": "BMP-2",
+    "role": "Schützenpanzer"
+   },
+   "mbt": {
+    "name": "T-90A",
+    "role": "Kampfpanzer"
+   },
+   "aa": {
+    "name": "2K22 Tunguska",
+    "role": "Flakpanzer"
+   },
+   "art": {
+    "name": "2S19 Msta-S",
+    "role": "Rohrartillerie"
+   },
+   "mlrs": {
+    "name": "BM-21 Grad",
+    "role": "Raketenartillerie"
+   },
+   "heli": {
+    "name": "Mi-24 Hind",
+    "role": "Kampfhubschrauber"
+   },
+   "jet": {
+    "name": "Su-34",
+    "role": "Kampfjet"
+   },
+   "boat": {
+    "name": "Raptor",
+    "role": "Patrouillenboot"
+   },
+   "corvette": {
+    "name": "Steregushchiy",
+    "role": "Korvette"
+   },
+   "destroyer": {
+    "name": "Slava-Kreuzer",
+    "role": "Raketenkreuzer"
+   },
+   "lander": {
+    "name": "Ondatra",
+    "role": "Landungsschiff"
+   },
+   "carrier": {
+    "name": "Admiral Kusnezow",
+    "role": "Flugzeugträger"
+   },
+   "mortar": {
+    "name": "Mörsertrupp (2B11)",
+    "role": "Mörsertrupp"
+   },
+   "medic": {
+    "name": "Sanitäter (Sanitar)",
+    "role": "Sanitäter"
+   },
+   "fighter": {
+    "name": "Su-35",
+    "role": "Jagdflugzeug"
+   },
+   "cas": {
+    "name": "Su-25 Frogfoot",
+    "role": "Erdkampfflugzeug"
+   }
+  }
+ },
+ "hullPerFaction": {
+  "nato": {
+   "boat": [
+    1,
+    0.31
+   ],
+   "corvette": [
+    1.38,
+    0.41
+   ],
+   "destroyer": [
+    1.88,
+    0.52
+   ],
+   "lander": [
+    1.12,
+    0.47
+   ],
+   "carrier": [
+    2.62,
+    0.8
+   ]
+  },
+  "ru": {
+   "boat": [
+    0.82,
+    0.31
+   ],
+   "corvette": [
+    1.38,
+    0.41
+   ],
+   "destroyer": [
+    1.94,
+    0.52
+   ],
+   "lander": [
+    1.12,
+    0.47
+   ],
+   "carrier": [
+    2.62,
+    0.8
+   ]
+  }
+ }
+}
