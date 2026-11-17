@@ -11,6 +11,7 @@
   --red: #ff5a4a;
   --blue: #3d74d8;
   --font: 'Pixelify Sans', ui-monospace, 'Courier New', monospace;
+  color-scheme: dark;
 }
 * {
   box-sizing: border-box;
@@ -46,8 +47,31 @@ button:hover {
 
 #app {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
+}
+/* narrow screens: the command bar goes below the battlefield */
+@media (max-width: 760px) {
+  #app {
+    flex-direction: column;
+  }
+  #side {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 46%;
+    overflow-y: auto;
+    border-left: none !important;
+    border-top: 3px solid var(--line);
+  }
+  #mini {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 2 / 1;
+  }
+  #tip {
+    right: 8px !important;
+    top: 8px !important;
+  }
 }
 #view-wrap {
   position: relative;
