@@ -2,6 +2,7 @@
 // map, the build menus with hotkeys and data cards, the selection, and the radio log.
 
 import type { Game, Ent } from '../game/game'
+import { COVER } from '../game/game'
 import type { Assets } from '../game/assets'
 import type { Renderer } from '../game/render'
 import type { Input } from '../game/input'
@@ -287,13 +288,13 @@ export class Hud {
     const g = this.g
     const sel = this.input.sel.filter((e) => !e.dead && !e.carriedBy)
     const el = $('sel')
-    const key = sel.map((e) => e.id).join(',')
+    const key = sel.map((e) => e.id + (e.inside ? 'i' : '') + (e.key === 'bunker' ? 'g' + (g.garrisonOf(e)?.occ.length ?? 0) : '')).join(',')
     if (key !== this.selKey) {
       this.selKey = key
       el.innerHTML = ''
       if (!sel.length) {
         el.innerHTML =
-          '<div class="stencil sel-title">Auswahl</div><div class="hint">Linksklick oder Rahmen: auswählen<br>Rechtsklick: bewegen / angreifen<br>A: Angriffsbewegung · S: Stopp<br>Strg+1–9: Gruppe · H: Hauptquartier</div>'
+          '<div class="stencil sel-title">Auswahl</div><div class="hint">Linksklick oder Rahmen: auswählen<br>Rechtsklick: bewegen / angreifen<br>A: Angriffsbewegung · S: Stopp<br>Rechtsklick auf Haus: besetzen · D: räumen<br>Strg+1–9: Gruppe · H: Hauptquartier</div>'
         return
       }
       if (sel.length === 1) {
@@ -327,8 +328,12 @@ export class Hud {
             add('Reparieren', () => (e.repairing = !e.repairing), 'rep', e.repairing)
             const q = e.b!.produces
             if (q && q !== 'build') add('Hauptgebäude', () => (g.me.primary[q] = e.id), '', g.me.primary[q] === e.id)
+            const hg = g.garrisonOf(e)
+            if (hg && hg.occ.length) add('Räumen (D)', () => g.commandExit([...hg.occ]))
           } else if (e.u!.transport) {
             add('Entladen (D)', () => g.commandUnload(e))
+          } else if (e.inside) {
+            add('Räumen (D)', () => g.commandExit([e]))
           }
           if (row.childElementCount) el.append(row)
         }
@@ -350,6 +355,16 @@ export class Hud {
           wrap.append(b)
         }
         el.append(wrap)
+        const inside = sel.filter((e) => e.inside && e.owner === 0)
+        if (inside.length) {
+          const row = document.createElement('div')
+          row.className = 'acts'
+          const b = document.createElement('button')
+          b.textContent = `Räumen (D) · ${inside.length}`
+          b.onclick = () => g.commandExit(inside)
+          row.append(b)
+          el.append(row)
+        }
       }
     }
     if (sel.length === 1) {
@@ -373,9 +388,16 @@ export class Hud {
     if (e.isB) {
       if (e.key === 'airfield') return `Stellplätze belegt: ${g.ents.filter((j) => j.jet && !j.dead && j.home === e.id).length} / ${e.b!.slots ?? 3}`
       if (e.repairing) return 'Wird repariert'
+      const hg = g.garrisonOf(e)
+      if (hg) return `Besatzung ${hg.occ.length} / ${hg.cap} · Reichweite ${g.rangeOf(e).toFixed(1)}`
       return e.b!.weapon ? `Reichweite ${e.b!.weapon.range}` : ''
     }
     if (!u) return ''
+    if (e.inside) {
+      const h = e.inside
+      return `Im Gebäude: ${h.name} (${h.occ.length}/${h.cap}) · Deckung ${Math.round((1 - COVER) * 100)}% · Reichweite ${g.rangeOf(e).toFixed(1)}`
+    }
+    if (u.engineer) return 'Rechtsklick auf feindliches Gebäude: erobern'
     if (u.harvester) return `Ladung: ${Math.floor(e.cargo)} / ${HARVEST_LOAD}`
     if (u.transport) return `An Bord: ${e.passengers.length} / ${u.transport}`
     if (u.carrier) return `Jets an Bord: ${e.planes} / ${u.carrier}`

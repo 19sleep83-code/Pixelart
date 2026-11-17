@@ -119,7 +119,7 @@ export class Input {
       const x0 = Math.min(box.x0, box.x1), x1 = Math.max(box.x0, box.x1)
       const y0 = Math.min(box.y0, box.y1), y1 = Math.max(box.y0, box.y1)
       const picked = g.ents.filter((u) => {
-        if (u.isB || u.dead || u.owner !== 0 || u.carriedBy) return false
+        if (u.isB || u.dead || u.owner !== 0 || u.carriedBy || u.inside) return false
         const s = this.r.toScreen(u.x, u.y, u.z)
         return s.x >= x0 && s.x <= x1 && s.y - 4 >= y0 && s.y - 4 <= y1
       })
@@ -129,8 +129,22 @@ export class Input {
     }
     const hit = this.r.pick(p.x, p.y)
     if (!hit) {
+      // a house of ours: the soldiers inside
+      const hg = this.r.pickGarrison(p.x, p.y)
+      if (hg && hg.owner === 0 && hg.occ.length) {
+        this.setSel(e.shiftKey ? [...new Set([...this.sel.filter((s) => !s.isB), ...hg.occ])] : [...hg.occ])
+        return
+      }
       if (!e.shiftKey) this.setSel([])
       return
+    }
+    // a bunker clicked twice: its crew
+    if (hit.isB && hit.owner === 0 && this.lastClick.id === hit.id && performance.now() - this.lastClick.t < 350) {
+      const hg = this.game.garrisonOf(hit)
+      if (hg && hg.occ.length) {
+        this.setSel([...hg.occ])
+        return
+      }
     }
     // double click: all of that kind in view
     const now = performance.now()
@@ -178,6 +192,42 @@ export class Input {
       for (const b of blds) if (b.b!.produces && b.b!.produces !== 'build') b.rally = { x: w.x, y: w.y }
       this.overlay.moveMark = { x: w.x, y: w.y, t: g.time, attack: false }
       return
+    }
+    // engineers take over enemy buildings
+    const eng = units.filter((u) => u.u!.engineer)
+    if (hit && hit.isB && hit.owner !== 0 && eng.length) {
+      g.commandCapture(eng, hit)
+      const rest = units.filter((u) => !u.u!.engineer)
+      const can = rest.filter((u) => g.canHit(u, hit) || u.jet)
+      g.commandAttack(can, hit)
+      const walk = rest.filter((u) => !can.includes(u))
+      if (walk.length) g.commandMove(walk, hit.x, hit.y, false)
+      this.overlay.moveMark = { x: hit.x, y: hit.y, t: g.time, attack: false }
+      g.onSound('ack', 0, 0)
+      return
+    }
+    // soldiers into a house, or into one of our bunkers
+    const hg = !hit || (hit.isB && hit.owner === 0) ? this.r.pickGarrison(px, py) : null
+    if (hg) {
+      const inf = units.filter((u) => u.u!.infantry && !u.u!.engineer)
+      if (hg.occ.length && hg.owner !== 0) {
+        // the enemy is in there: fire on the house
+        const t = hg.occ[0]
+        const can = units.filter((u) => g.canHit(u, t) || u.jet)
+        g.commandAttack(can, t)
+        this.overlay.moveMark = { x: hg.x, y: hg.y, t: g.time, attack: true }
+        g.onSound('ack', 0, 0)
+        return
+      }
+      if (inf.length && g.canEnter(0, hg)) {
+        g.commandGarrison(inf, hg)
+        const rest = units.filter((u) => !inf.includes(u))
+        if (rest.length) g.commandMove(rest, hg.x, hg.y + 1.5, false)
+        this.overlay.moveMark = { x: hg.x, y: hg.y, t: g.time, attack: false }
+        g.onSound('ack', 0, 0)
+        return
+      }
+      if (inf.length && hg.occ.length >= hg.cap) g.msg(`${hg.name} ist voll`, 'warn')
     }
     // ground troops onto our landing ship
     if (hit && hit.owner === 0 && hit.u?.transport) {
@@ -264,9 +314,19 @@ export class Input {
       case 's':
         g.commandStop(this.sel.filter((s) => s.owner === 0))
         break
-      case 'd':
+      case 'd': {
         for (const t of this.sel) if (t.owner === 0 && t.u?.transport) g.commandUnload(t)
+        const out = this.sel.filter((t) => t.owner === 0 && t.inside)
+        for (const b of this.sel) {
+          const hg = b.isB && b.owner === 0 ? g.garrisonOf(b) : null
+          if (hg) out.push(...hg.occ)
+        }
+        if (out.length) {
+          g.commandExit(out)
+          this.onChange()
+        }
         break
+      }
       case 'h': {
         const hq = g.ents.find((e) => e.owner === 0 && e.key === 'hq') ?? g.ents.find((e) => e.owner === 0 && e.isB)
         if (hq) this.r.lookAt(hq.x, hq.y)
@@ -324,6 +384,8 @@ export class Input {
     if (this.sel.some((s) => s.dead || s.carriedBy)) this.setSel(this.sel.filter((s) => !s.dead && !s.carriedBy))
     const p = this.mouse
     this.overlay.hoverEnt = p.inside && !this.overlay.box ? this.r.pick(p.x, p.y) : null
+    const hb = this.overlay.hoverEnt
+    this.overlay.hoverG = p.inside && !this.overlay.box && (!hb || (hb.isB && hb.owner === 0 && hb.key === 'bunker')) ? this.r.pickGarrison(p.x, p.y) : null
     if (this.place) {
       const t = this.placeTile(p.x, p.y)
       this.overlay.place = { key: this.place, tx: t.tx, ty: t.ty, ok: g.canPlace(0, this.place, t.tx, t.ty) }
@@ -334,7 +396,10 @@ export class Input {
     const mine = this.sel.some((s) => !s.isB && s.owner === 0)
     if (this.place) cur = 'cell'
     else if (this.attackMode) cur = 'crosshair'
+    else if (h && h.isB && h.owner !== 0 && this.sel.some((s) => s.u?.engineer)) cur = 'copy'
     else if (h && h.owner !== 0 && mine) cur = 'crosshair'
+    else if (this.overlay.hoverG && this.overlay.hoverG.occ.length && this.overlay.hoverG.owner !== 0 && mine) cur = 'crosshair'
+    else if (this.overlay.hoverG && this.sel.some((s) => s.u?.infantry && !s.u.engineer) && g.canEnter(0, this.overlay.hoverG)) cur = 'alias'
     else if (h && h.owner === 0 && h.u?.transport && this.sel.some((s) => !s.isB && !s.naval && !s.air)) cur = 'alias'
     else if (h) cur = 'pointer'
     else if (mine) {

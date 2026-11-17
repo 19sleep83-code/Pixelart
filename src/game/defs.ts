@@ -73,6 +73,8 @@ export interface UnitDef {
   carrier?: number
   /** hidden from the enemy while it keeps still */
   stealth?: boolean
+  /** takes over enemy buildings */
+  engineer?: boolean
 }
 
 export interface BuildingDef {
@@ -96,6 +98,8 @@ export interface BuildingDef {
   reach?: number
   /** parking spots for jets */
   slots?: number
+  /** soldiers it can take in */
+  garrison?: number
 }
 
 const rifle: WeaponDef = { cls: 'mg', proj: 'bullet', dmg: 9, range: 4, reload: 0.9, burst: 3, gap: 0.12, ground: true, air: true }
@@ -119,6 +123,12 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
       cost: 500, time: 9, hp: 50, armor: 'inf', speed: 0.8, turn: 0, sight: 9, radius: 0.2,
       weapon: { cls: 'sniper', proj: 'snipe', dmg: 60, range: 8, reload: 3.2, ground: true, air: false, sea: false },
       queue: 'inf', producer: 'barracks', req: ['barracks', 'radar'], infantry: true, stealth: true,
+    },
+    engineer: {
+      key: 'engineer', name: nato ? 'Pionier' : 'Pionier (Sapjor)', role: 'Pionier',
+      desc: 'Erobert feindliche Gebäude: Rechtsklick auf das Gebäude. Wird dabei verbraucht. Ohne Waffe.',
+      cost: 500, time: 8, hp: 60, armor: 'inf', speed: 0.9, turn: 0, sight: 5, radius: 0.2,
+      queue: 'inf', producer: 'barracks', req: ['barracks'], infantry: true, engineer: true,
     },
     harv: {
       key: 'harv', name: nato ? 'MAN-Erzlaster' : 'KAMAZ-Erzlaster', role: 'Erzlaster', desc: 'Sammelt Erz und bringt es zum Rohstoffdepot.',
@@ -228,9 +238,9 @@ export function buildingDefs(): Record<string, BuildingDef> {
     helipad: { key: 'helipad', name: 'Hubschrauberplatz', desc: 'Baut Kampfhubschrauber.', cost: 1200, time: 11, hp: 850, w: 2, h: 2, power: -20, sight: 5, req: ['radar'], produces: 'air' },
     airfield: { key: 'airfield', name: 'Flugfeld', desc: 'Baut Kampfjets und bietet drei Stellplätze zum Aufmunitionieren.', cost: 1800, time: 15, hp: 1300, w: 4, h: 3, power: -40, sight: 6, req: ['radar'], produces: 'air', slots: 3 },
     bunker: {
-      key: 'bunker', name: 'MG-Bunker', desc: 'Verteidigung gegen Infanterie und leichte Fahrzeuge.', cost: 500, time: 7, hp: 800, w: 1, h: 1, power: -10, sight: 6,
+      key: 'bunker', name: 'MG-Bunker', desc: 'Verteidigung gegen Infanterie und leichte Fahrzeuge. Bis zu 3 Soldaten können einsteigen und mitschießen.', cost: 500, time: 7, hp: 800, w: 1, h: 1, power: -10, sight: 6,
       weapon: { cls: 'auto', proj: 'bullet', dmg: 12, range: 5.5, reload: 0.9, burst: 4, gap: 0.1, ground: true, air: false },
-      req: ['barracks'], defense: true,
+      req: ['barracks'], defense: true, garrison: 3,
     },
     rocket: {
       key: 'rocket', name: 'Raketenstellung', desc: 'Verteidigung gegen Panzer, Schiffe, Hubschrauber und Jets.', cost: 750, time: 9, hp: 600, w: 1, h: 1, power: -20, sight: 7,
@@ -241,7 +251,7 @@ export function buildingDefs(): Record<string, BuildingDef> {
 }
 
 export const BUILD_ORDER = ['power', 'ref', 'barracks', 'factory', 'radar', 'shipyard', 'helipad', 'airfield', 'bunker', 'rocket']
-export const UNIT_ORDER = ['rifle', 'at', 'sniper', 'harv', 'scout', 'ifv', 'mbt', 'aa', 'art', 'mlrs', 'heli', 'jet', 'boat', 'corvette', 'destroyer', 'lander', 'carrier']
+export const UNIT_ORDER = ['rifle', 'at', 'sniper', 'engineer', 'harv', 'scout', 'ifv', 'mbt', 'aa', 'art', 'mlrs', 'heli', 'jet', 'boat', 'corvette', 'destroyer', 'lander', 'carrier']
 
 /** shooting at something: does this weapon reach that kind of target */
 export function reaches(w: WeaponDef, t: { air: boolean; naval: boolean }): boolean {

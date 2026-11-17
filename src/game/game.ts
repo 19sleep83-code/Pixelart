@@ -10,7 +10,39 @@ import {
 import type { Faction } from './colors'
 import { mulberry32 } from '../core/rng'
 
-export type Order = 'idle' | 'move' | 'attack' | 'amove' | 'harvest' | 'board' | 'unload' | 'strike'
+export type Order = 'idle' | 'move' | 'attack' | 'amove' | 'harvest' | 'board' | 'unload' | 'strike' | 'enter' | 'capture'
+
+/** what can be held by soldiers: a village house, the church, a barn, or a bunker of our own */
+export type GKind = 'house' | 'church' | 'barn' | 'bunker'
+export interface Garrison {
+  id: number
+  kind: GKind
+  name: string
+  /** the middle of it, and its footprint */
+  x: number
+  y: number
+  tx: number
+  ty: number
+  w: number
+  h: number
+  cap: number
+  occ: Ent[]
+  /** who holds it, -1 nobody */
+  owner: number
+  /** extra reach and sight from the windows (or the tower) */
+  range: number
+  sight: number
+  /** the bunker it belongs to */
+  b: Ent | null
+}
+const GSPEC: Record<GKind, { cap: number; range: number; sight: number; name: string }> = {
+  house: { cap: 4, range: 1.5, sight: 2, name: 'Wohnhaus' },
+  barn: { cap: 3, range: 1, sight: 1.5, name: 'Scheune' },
+  church: { cap: 6, range: 2.5, sight: 4, name: 'Kirche' },
+  bunker: { cap: 3, range: 1, sight: 1, name: 'MG-Bunker' },
+}
+/** how much of the damage reaches soldiers inside */
+export const COVER = 0.3
 /** a jet: parked at home, flying out to a strike, flying back, coming in to land */
 export type JState = 'park' | 'out' | 'back' | 'land'
 export type HState = 'idle' | 'toOre' | 'mining' | 'toRef' | 'unload'
@@ -109,6 +141,10 @@ export class Ent {
   planes = 0
   planeT = 0
   launchT = 0
+  // holding a house
+  inside: Garrison | null = null
+  enterG: Garrison | null = null
+  captureB: Ent | null = null
   // experience, stealth and looks
   kills = 0
   rank = 0
@@ -144,7 +180,7 @@ export class Ent {
     return !!this.u?.stealth && this.stillT > 2.5
   }
   get sight(): number {
-    return (this.isB ? this.b!.sight : this.u!.sight)
+    return (this.isB ? this.b!.sight : this.u!.sight) + (this.inside ? this.inside.sight : 0)
   }
 }
 
@@ -246,6 +282,11 @@ export class Game {
   private next: Int32Array = new Int32Array(0)
   private list: Ent[] = []
   alertT = -99
+  /** houses, the church, barns and bunkers soldiers can hold */
+  garrisons: Garrison[] = []
+  /** the garrison on a tile */
+  gAt = new Map<number, Garrison>()
+  private gid = 1
   onSound: (name: string, x: number, y: number) => void = () => {}
 
   constructor(public opts: GameOpts) {
@@ -277,8 +318,198 @@ export class Game {
       this.addUnit(i, 'rifle', sx + toward * 2.9, sy + toward * 2.0)
       this.addUnit(i, 'rifle', sx + toward * 2.6, sy + toward * 2.7)
     }
+    // every house of the villages can be held
+    for (const st of this.map.statics) {
+      const kind: GKind | null = st.kind === 'house' || st.kind === 'timber' ? 'house' : st.kind === 'church' ? 'church' : st.kind === 'barn' ? 'barn' : null
+      if (kind) this.addGarrison(kind, Math.floor(st.x), Math.floor(st.y), 1, 1, null)
+    }
     this.updatePower()
     this.updateFog()
+  }
+
+  addGarrison(kind: GKind, tx: number, ty: number, w: number, h: number, b: Ent | null): Garrison {
+    const sp = GSPEC[kind]
+    const g: Garrison = {
+      id: this.gid++, kind, name: sp.name, x: tx + w / 2, y: ty + h / 2, tx, ty, w, h,
+      cap: kind === 'bunker' && b ? b.b!.garrison ?? sp.cap : sp.cap, occ: [], owner: b ? b.owner : -1,
+      range: sp.range, sight: sp.sight, b,
+    }
+    this.garrisons.push(g)
+    for (let y = ty; y < ty + h; y++) for (let x = tx; x < tx + w; x++) this.gAt.set(this.map.idx(x, y), g)
+    return g
+  }
+
+  garrisonAt(x: number, y: number): Garrison | null {
+    const tx = Math.floor(x), ty = Math.floor(y)
+    if (!this.map.inMap(tx, ty)) return null
+    return this.gAt.get(this.map.idx(tx, ty)) ?? null
+  }
+
+  garrisonOf(b: Ent): Garrison | null {
+    return this.garrisons.find((g) => g.b === b) ?? null
+  }
+
+  /** can this player's soldiers go in */
+  canEnter(p: number, g: Garrison): boolean {
+    if (g.b && (g.b.dead || g.b.owner !== p || g.b.built < 1)) return false
+    if (g.occ.length && g.owner !== p) return false
+    return g.occ.length < g.cap
+  }
+
+  /** distance from a unit to the walls of a garrison */
+  gDist(u: Ent, g: Garrison): number {
+    const dx = Math.max(g.tx - u.x, 0, u.x - (g.tx + g.w))
+    const dy = Math.max(g.ty - u.y, 0, u.y - (g.ty + g.h))
+    return Math.hypot(dx, dy)
+  }
+
+  /** soldiers walk to a house (or one of our bunkers) and go in */
+  commandGarrison(units: Ent[], g: Garrison) {
+    const troops = units.filter((u) => !u.isB && !u.dead && u.u!.infantry && !u.carriedBy && !u.u!.engineer && u.inside !== g)
+    if (!troops.length) return
+    if (!this.canEnter(troops[0].owner, g)) {
+      this.msg(g.occ.length >= g.cap ? `${g.name} ist voll` : `${g.name} ist vom Feind besetzt`, 'warn', troops[0].owner)
+      return
+    }
+    this.commandExit(troops.filter((u) => u.inside))
+    for (const u of troops) {
+      u.order = 'enter'
+      u.enterG = g
+      u.target = null
+      u.amove = null
+      u.guard = null
+      u.boardOn = null
+      u.repathT = 0
+      this.walkTo(u, g)
+    }
+  }
+
+  /** head for the nearest open ground beside a house or building */
+  private walkTo(u: Ent, g: { tx: number; ty: number; w: number; h: number }) {
+    let best: { x: number; y: number } | null = null
+    let bd = 1e9
+    for (let y = g.ty - 1; y <= g.ty + g.h; y++)
+      for (let x = g.tx - 1; x <= g.tx + g.w; x++) {
+        if (x >= g.tx && x < g.tx + g.w && y >= g.ty && y < g.ty + g.h) continue
+        if (!this.pf.ok(x, y)) continue
+        const d = Math.hypot(x + 0.5 - u.x, y + 0.5 - u.y)
+        if (d < bd) {
+          bd = d
+          best = { x, y }
+        }
+      }
+    if (best) this.setDest(u, best.x + 0.5, best.y + 0.5)
+    else this.setDest(u, g.tx + g.w / 2, g.ty + g.h / 2)
+  }
+
+  private enter(u: Ent, g: Garrison) {
+    u.order = 'idle'
+    u.enterG = null
+    if (!this.canEnter(u.owner, g)) {
+      this.msg(g.occ.length >= g.cap ? `${g.name} ist voll` : `${g.name} ist vom Feind besetzt`, 'warn', u.owner)
+      u.guard = { x: u.x, y: u.y }
+      return
+    }
+    if (!g.occ.length && g.owner !== u.owner && u.owner === 0) this.msg(`${g.name} besetzt`, 'good')
+    g.occ.push(u)
+    g.owner = u.owner
+    u.inside = g
+    u.x = g.x
+    u.y = g.y
+    u.path = []
+    u.dest = null
+    u.target = null
+    u.moving = false
+    u.speedNow = 0
+    u.guard = null
+    this.onSound('board', u.x, u.y)
+  }
+
+  /** everyone out onto the ground round the house */
+  commandExit(units: Ent[]) {
+    for (const u of units) {
+      const g = u.inside
+      if (!g) continue
+      this.leave(u, g)
+    }
+  }
+
+  private leave(u: Ent, g: Garrison) {
+    const i = g.occ.indexOf(u)
+    if (i >= 0) g.occ.splice(i, 1)
+    if (!g.occ.length && !g.b) g.owner = -1
+    u.inside = null
+    // the nearest free ground; soldiers spread round the door
+    const spots: { x: number; y: number; d: number }[] = []
+    for (let y = g.ty - 1; y <= g.ty + g.h; y++)
+      for (let x = g.tx - 1; x <= g.tx + g.w; x++) {
+        if (x >= g.tx && x < g.tx + g.w && y >= g.ty && y < g.ty + g.h) continue
+        if (this.pf.ok(x, y)) spots.push({ x, y, d: Math.hypot(x + 0.5 - g.x, y + 1.5 - g.y) + this.rand() * 0.6 })
+      }
+    spots.sort((a, b) => a.d - b.d)
+    const s = spots[0] ?? this.pf.nearestWalkable(g.x, g.y)
+    if (s) {
+      u.x = s.x + 0.3 + this.rand() * 0.4
+      u.y = s.y + 0.3 + this.rand() * 0.4
+    }
+    u.order = 'idle'
+    u.target = null
+    u.path = []
+    u.dest = null
+    u.guard = { x: u.x, y: u.y }
+  }
+
+  /** engineers walk to an enemy building and take it over */
+  commandCapture(units: Ent[], b: Ent) {
+    for (const u of units) {
+      if (u.dead || !u.u?.engineer || u.carriedBy) continue
+      u.order = 'capture'
+      u.captureB = b
+      u.target = null
+      u.amove = null
+      u.guard = null
+      u.repathT = 0
+      this.walkTo(u, b)
+    }
+  }
+
+  private capture(u: Ent, b: Ent) {
+    const was = b.owner
+    // whoever was in a bunker gets out first
+    const g = this.garrisonOf(b)
+    if (g) {
+      for (const o of [...g.occ]) this.leave(o, g)
+      g.owner = u.owner
+    }
+    b.owner = u.owner
+    b.selected = false
+    b.rally = null
+    b.repairing = false
+    b.target = null
+    b.tdir = this.players[u.owner].faction === 'nato' ? -Math.PI / 4 : Math.PI * 0.75
+    const pl = this.players[was]
+    for (const q of Object.keys(pl.primary) as Queue[]) if (pl.primary[q] === b.id) delete pl.primary[q]
+    // the engineer stays inside to run it
+    u.dead = true
+    u.selected = false
+    this.byId.delete(u.id)
+    this.players[u.owner].stats.built++
+    this.updatePower()
+    this.addFx('spark', b.x, b.y, 14, 0, 0, 10, 0.5, 1)
+    this.onSound('capture', b.x, b.y)
+    if (u.owner === 0) this.msg(`${b.b!.name} erobert!`, 'good')
+    else if (was === 0) this.msg(`${b.b!.name} wurde vom Feind erobert!`, 'warn')
+  }
+
+  /** how far a unit shoots, with the bonus from the house it holds */
+  rangeOf(u: Ent): number {
+    const w = u.weapon
+    if (!w) return 0
+    if (u.isB) {
+      const g = u.key === 'bunker' ? this.garrisonOf(u) : null
+      return w.range + (g && g.occ.length ? 0.5 : 0)
+    }
+    return w.range + (u.inside ? u.inside.range : 0)
   }
 
   get me(): Player {
@@ -327,6 +558,7 @@ export class Game {
     for (let y = ty; y < ty + def.h; y++) for (let x = tx; x < tx + def.w; x++) this.map.bld[this.map.idx(x, y)] = e.id
     this.ents.push(e)
     this.byId.set(e.id, e)
+    if (def.garrison) this.addGarrison('bunker', tx, ty, def.w, def.h, e)
     // anyone standing there steps aside
     for (const u of this.ents) {
       if (u.isB || u.air || u.dead) continue
@@ -566,6 +798,7 @@ export class Game {
   /** send units to a place, spread out so they do not all fight for one tile */
   commandMove(units: Ent[], x: number, y: number, attackMove: boolean) {
     const live = units.filter((u) => !u.isB && !u.dead && !u.carriedBy)
+    this.commandExit(live.filter((u) => u.inside))
     const ground = live.filter((u) => !u.air && !u.naval)
     const ships = live.filter((u) => u.naval)
     const air = live.filter((u) => u.air && !u.jet)
@@ -585,6 +818,8 @@ export class Game {
         u.target = null
         u.guard = null
         u.boardOn = null
+        u.enterG = null
+        u.captureB = null
         if (u.u!.harvester) u.hs = 'idle'
       })
     go(ground, this.formation(x, y, ground, false))
@@ -674,6 +909,7 @@ export class Game {
     for (const u of units) {
       if (u.isB || u.dead || !u.weapon || u.jet || u.carriedBy) continue
       if (!this.canHit(u, t)) continue
+      if (u.inside && this.dist(u, t) > this.rangeOf(u)) continue
       u.order = 'attack'
       u.target = t
       u.amove = null
@@ -710,7 +946,9 @@ export class Game {
       u.dest = null
       u.amove = null
       u.boardOn = null
-      u.guard = { x: u.x, y: u.y }
+      u.enterG = null
+      u.captureB = null
+      u.guard = u.inside ? null : { x: u.x, y: u.y }
       if (u.u!.harvester) u.hs = 'idle'
     }
   }
@@ -742,6 +980,7 @@ export class Game {
   commandBoard(units: Ent[], tr: Ent) {
     const troops = units.filter((u) => !u.isB && !u.dead && !u.air && !u.naval && !u.carriedBy)
     if (!troops.length) return
+    this.commandExit(troops.filter((u) => u.inside))
     const cx = troops.reduce((a, u) => a + u.x, 0) / troops.length
     const cy = troops.reduce((a, u) => a + u.y, 0) / troops.length
     // meet halfway between the troops and the ship, at the water's edge
@@ -948,11 +1187,12 @@ export class Game {
     }
     if (b.weapon) {
       const low = this.players[b.owner].powerUse > this.players[b.owner].powerProd
-      if (b.target && (b.target.dead || this.dist(b, b.target) > b.weapon.range + 0.5 || !this.visibleTo(b.owner, b.target))) b.target = null
+      const rg = this.rangeOf(b)
+      if (b.target && (b.target.dead || this.dist(b, b.target) > rg + 0.5 || !this.visibleTo(b.owner, b.target))) b.target = null
       b.scanT -= dt
       if (!b.target && b.scanT <= 0) {
         b.scanT = 0.4
-        b.target = this.findTarget(b, b.weapon.range)
+        b.target = this.findTarget(b, rg)
       }
       this.aimAndFire(b, dt * (low ? 0.5 : 1))
     }
@@ -977,6 +1217,50 @@ export class Game {
     // keeping still (for snipers)
     if (u.moving || this.time - u.firedT < 0.5) u.stillT = 0
     else u.stillT += dt
+    // holding a house: shoot from the windows at whatever comes in reach
+    if (u.inside) {
+      const g = u.inside
+      u.x = g.x
+      u.y = g.y
+      u.moving = false
+      if (!w) return
+      const rg = this.rangeOf(u)
+      if (u.target && (u.target.dead || this.dist(u, u.target) > rg || (u.order !== 'attack' && !this.visibleTo(u.owner, u.target)))) {
+        u.target = null
+        u.order = 'idle'
+      }
+      u.scanT -= dt
+      if (!u.target && u.scanT <= 0) {
+        u.scanT = 0.35 + this.rand() * 0.15
+        u.target = this.findTarget(u, rg)
+      }
+      this.aimAndFire(u, dt)
+      return
+    }
+    if (u.order === 'enter' || u.order === 'capture') {
+      const g = u.enterG
+      const b = u.captureB
+      if (u.order === 'enter' ? !g || (g.b?.dead ?? false) : !b || b.dead || b.owner === u.owner) {
+        u.order = 'idle'
+        u.enterG = null
+        u.captureB = null
+        u.guard = { x: u.x, y: u.y }
+      } else if (g && (this.gDist(u, g) < 0.75 || (!u.path.length && !u.dest && this.gDist(u, g) < 1.6))) {
+        this.enter(u, g)
+        return
+      } else if (b && (this.dist(u, b) < 0.75 || (!u.path.length && !u.dest && this.dist(u, b) < 1.6))) {
+        this.capture(u, b)
+        return
+      } else {
+        u.repathT -= dt
+        if (!u.path.length && !u.dest && u.repathT <= 0) {
+          u.repathT = 1.5
+          this.walkTo(u, (g ?? b)!)
+        }
+      }
+      this.move(u, dt)
+      return
+    }
     if (def.carrier) this.carrierDeck(u, dt)
     if (u.order === 'board') {
       const tr = u.boardOn
@@ -1012,7 +1296,7 @@ export class Game {
         u.scanT = 0.35 + this.rand() * 0.15
         if (u.order === 'idle' || u.order === 'amove') {
           if (!u.target) {
-            const t = this.findTarget(u, u.order === 'idle' ? Math.max(w.range, u.sight - 1) : u.sight)
+            const t = this.findTarget(u, u.order === 'idle' ? Math.max(this.rangeOf(u), u.sight - 1) : u.sight)
             if (t) u.target = t
           }
           // the guard post: an idle unit does not chase too far
@@ -1557,7 +1841,7 @@ export class Game {
     const N = this.map.N
     for (let i = 0; i < n; i++) {
       const e = this.ents[i]
-      if (e.isB || e.dead || e.air || e.carriedBy) {
+      if (e.isB || e.dead || e.air || e.carriedBy || e.inside) {
         this.next[i] = -2
         continue
       }
@@ -1573,7 +1857,7 @@ export class Game {
     const list = this.list
     for (let i = 0; i < list.length; i++) {
       const a = list[i]
-      if (a.isB || a.dead || a.air || a.carriedBy) continue
+      if (a.isB || a.dead || a.air || a.carriedBy || a.inside) continue
       const cx = Math.floor(a.x), cy = Math.floor(a.y)
       const reach = a.naval ? 2 : 1
       for (let ty = cy - reach; ty <= cy + reach; ty++) {
@@ -1583,7 +1867,7 @@ export class Game {
           for (let j = this.head[ty * N + tx]; j >= 0; j = this.next[j]) {
             if (j <= i) continue
             const b = list[j]
-            if (b.dead || b.naval !== a.naval) continue
+            if (b.dead || b.naval !== a.naval || b.inside) continue
             const dx = b.x - a.x, dy = b.y - a.y
             const d = Math.hypot(dx, dy)
             const min = (a.u!.radius + b.u!.radius) * (a.u!.infantry && b.u!.infantry ? 0.9 : 1)
@@ -1619,6 +1903,18 @@ export class Game {
   visibleTo(p: number, e: Ent): boolean {
     if (e.owner === p) return true
     if (e.carriedBy) return false
+    // inside a house only the flag shows, until the muzzle flashes give them away
+    if (e.inside && this.time - e.firedT > 2.5) {
+      let near = false
+      for (const o of this.ents) {
+        if (o.owner !== p || o.dead || o.isB || o.carriedBy || o.inside) continue
+        if (this.gDist(o, e.inside) < 1.2) {
+          near = true
+          break
+        }
+      }
+      if (!near) return false
+    }
     // a sniper keeping still is only seen from close by
     if (e.hidden) {
       let near = false
@@ -1712,7 +2008,7 @@ export class Game {
       aligned = Math.abs(angDiff(u.dir, want)) < 0.2
       u.tdir = u.dir
     }
-    if (d > w.range || (w.minRange && d < w.minRange)) return
+    if (d > this.rangeOf(u) || (w.minRange && d < w.minRange)) return
     if (!aligned || u.cd > 0) return
     if (!u.isB && u.u!.infantry && u.moving) return
     u.cd = w.reload * (0.92 + this.rand() * 0.16)
@@ -1725,8 +2021,8 @@ export class Game {
   fireAt(u: Ent, t: Ent | null, tx: number, ty: number) {
     const w = u.weapon!
     const yaw = u.isB || this.mountsTurret(u) ? u.tdir : u.dir
-    const mz = u.isB ? (u.key === 'bunker' ? 7 : 4) : u.air ? u.z : u.u!.infantry ? 5 : u.naval ? 9 : 7
-    const along = u.isB ? 0.3 : u.u!.infantry ? 0.25 : u.jet ? 0.2 : u.radius * 0.8 + 0.15
+    const mz = u.isB ? (u.key === 'bunker' ? 7 : 4) : u.inside ? (u.inside.kind === 'church' ? 16 : 9) : u.air ? u.z : u.u!.infantry ? 5 : u.naval ? 9 : 7
+    const along = u.isB ? 0.3 : u.inside ? 0.45 : u.u!.infantry ? 0.25 : u.jet ? 0.2 : u.radius * 0.8 + 0.15
     const side = w.burst && w.burst > 1 && !u.u?.infantry ? (u.burst % 2 ? 0.2 : -0.2) : 0
     const x0 = u.x + Math.cos(yaw) * along - Math.sin(yaw) * side
     const y0 = u.y + Math.sin(yaw) * along + Math.cos(yaw) * side
@@ -1909,7 +2205,7 @@ export class Game {
   damage(e: Ent, dmg: number, cls: WClass, from: number, src = 0) {
     if (e.dead || e.owner === from || e.carriedBy) return
     const armor = e.isB ? 'bld' : e.u!.armor
-    const d = dmg * VS[cls][armor] * (0.9 + this.rand() * 0.2) * (1 - 0.07 * e.rank)
+    const d = dmg * VS[cls][armor] * (0.9 + this.rand() * 0.2) * (1 - 0.07 * e.rank) * (e.inside ? COVER : 1)
     e.hp -= d
     e.lastHit = this.time
     e.flashT = this.time
@@ -1922,7 +2218,7 @@ export class Game {
     const shooter = this.byId.get(src)
     const attacker = shooter && !shooter.dead ? shooter : this.nearestEnemyShooter(e, from)
     if (attacker) e.lastAttacker = attacker
-    if (!e.isB && e.order === 'idle' && !e.target && attacker && e.weapon && this.canHit(e, attacker)) e.target = attacker
+    if (!e.isB && e.order === 'idle' && !e.target && attacker && e.weapon && this.canHit(e, attacker) && (!e.inside || this.dist(e, attacker) <= this.rangeOf(e))) e.target = attacker
     if (e.hp <= 0) this.kill(e, from, src)
   }
 
@@ -1963,6 +2259,15 @@ export class Game {
     e.dead = true
     e.selected = false
     this.byId.delete(e.id)
+    if (e.inside) {
+      const g = e.inside
+      g.occ.splice(g.occ.indexOf(e), 1)
+      if (!g.occ.length && !g.b) {
+        g.owner = -1
+        if (e.owner === 0) this.msg(`${g.name} verloren`, 'warn')
+      }
+      e.inside = null
+    }
     // whoever was aboard goes down with the ship
     for (const p of e.passengers) {
       p.dead = true
@@ -1994,6 +2299,18 @@ export class Game {
     e.dead = true
     e.selected = false
     this.byId.delete(e.id)
+    const g = this.garrisonOf(e)
+    if (g) {
+      for (const o of [...g.occ]) {
+        this.leave(o, g)
+        if (destroyed) {
+          o.hp -= o.maxHp * 0.5
+          if (o.hp <= 0) this.kill(o, this.enemyOf(o.owner))
+        }
+      }
+      this.garrisons.splice(this.garrisons.indexOf(g), 1)
+      for (let y = g.ty; y < g.ty + g.h; y++) for (let x = g.tx; x < g.tx + g.w; x++) this.gAt.delete(this.map.idx(x, y))
+    }
     for (let y = e.ty; y < e.ty + e.h; y++) for (let x = e.tx; x < e.tx + e.w; x++) if (this.map.bld[this.map.idx(x, y)] === e.id) this.map.bld[this.map.idx(x, y)] = 0
     if (destroyed) {
       // a chain of blasts through the building, then the big one

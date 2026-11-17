@@ -138,7 +138,7 @@ function plate(m: Vox, x: number, y: number, z: number, along = true) {
 
 // ─────────────────────────────────────────────────────────── soldiers
 
-type Kit = 'rifle' | 'at' | 'sniper'
+type Kit = 'rifle' | 'at' | 'sniper' | 'engineer'
 type Pose = 'stand' | 'walk1' | 'walk2' | 'aim'
 
 function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
@@ -206,6 +206,14 @@ function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
       m.set(7, wy + 3, armZ - 2, hex('6a4a2a'))
       m.set(7, wy - 1, armZ, hex('6a4a2a'))
     }
+  } else if (kit === 'engineer') {
+    // a toolbox in the hand, a spade and a coil of cable on the pack
+    m.box(7, wy, armZ - 2, 8, wy + 1, armZ - 1, COL.hazard)
+    m.dot(7.5, wy + 0.5, armZ - 0.5, GUN)
+    m.rod(4.5, 2, 7, 5.5, 2, 13, hex('6a4a2a'))
+    m.box(4.5, 1.5, 13, 5.5, 2, 13.5, GUN_HI)
+    m.cylX(2.25, 9, 0.9, 3, 3, hex('8a4a2c'))
+    m.box(3, 3, 12, 7, 3, 12, COL.hazard) // a stripe on the helmet
   } else if (kit === 'at') {
     // the launcher on the shoulder
     const z = 11
@@ -1277,6 +1285,7 @@ export function unitModel(key: string, f: Faction): UnitModel {
     case 'rifle':
     case 'at':
     case 'sniper':
+    case 'engineer':
       return infantry(f, key as Kit)
     case 'harv':
       return { hull: oreTruck(f, false), alt: oreTruck(f, true) }

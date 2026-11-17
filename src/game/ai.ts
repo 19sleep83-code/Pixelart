@@ -21,6 +21,8 @@ export class AI {
   private fleet = new Set<number>()
   private nextFleet: number
   private strikeT = 0
+  private holdT = 20
+  private engT = 200
 
   constructor(public g: Game) {
     const d = g.opts.difficulty
@@ -40,6 +42,58 @@ export class AI {
     this.base()
     this.train()
     this.army()
+    this.hold()
+    this.engineers()
+  }
+
+  /** soldiers dig into the houses round the base */
+  private hold() {
+    const g = this.g
+    this.holdT -= this.thinkT
+    if (this.holdT > 0) return
+    this.holdT = 8
+    const hq = this.mine('hq')[0] ?? this.mine().find((e) => e.isB)
+    if (!hq) return
+    const want = [3, 6, 9][g.opts.difficulty]
+    const inside = this.mine().filter((u) => u.inside || u.order === 'enter').length
+    if (inside >= want) return
+    const idle = this.mine().filter((u) => u.u?.infantry && !u.u.engineer && !u.inside && !this.attackers.has(u.id) && !u.target && (u.order === 'idle' || (u.order === 'amove' && !u.dest && !u.path.length)))
+    if (idle.length < 3) return
+    const free = g.garrisons
+      .filter((h) => !h.b && g.canEnter(this.p, h) && Math.hypot(h.x - hq.x, h.y - hq.y) < 28)
+      .sort((a, b) => Math.hypot(a.x - hq.x, a.y - hq.y) - Math.hypot(b.x - hq.x, b.y - hq.y))
+    const h = free[0]
+    if (!h) return
+    const n = Math.min(h.cap - h.occ.length, want - inside, idle.length - 1)
+    if (n <= 0) return
+    idle.sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))
+    g.commandGarrison(idle.slice(0, n), h)
+  }
+
+  /** now and then a sapper tries to take over an enemy building */
+  private engineers() {
+    const g = this.g
+    const pl = g.players[this.p]
+    if (g.opts.difficulty === 0) return
+    this.engT -= this.thinkT
+    if (this.engT <= 0 && g.hasBuilding(this.p, 'barracks') && pl.credits > 1200 && !this.mine('engineer').length) {
+      this.engT = 140
+      g.queueItem(this.p, 'inf', 'engineer')
+    }
+    for (const u of this.mine('engineer')) {
+      if (u.order !== 'idle') continue
+      let best: Ent | null = null
+      let bd = 1e9
+      for (const b of g.ents) {
+        if (!b.isB || b.dead || b.owner === this.p || b.key === 'hq') continue
+        const d = Math.hypot(b.x - u.x, b.y - u.y) + (b.b!.defense ? 12 : 0)
+        if (d < bd) {
+          bd = d
+          best = b
+        }
+      }
+      if (best) g.commandCapture([u], best)
+    }
   }
 
   private mine(key?: string): Ent[] {
@@ -143,7 +197,7 @@ export class AI {
     const g = this.g
     this.navy()
     this.jets()
-    const units = this.mine().filter((e) => !e.isB && e.weapon && !e.naval && !e.jet)
+    const units = this.mine().filter((e) => !e.isB && e.weapon && !e.naval && !e.jet && !e.inside && e.order !== 'enter')
     // defend: whatever hit us recently gets a visit
     const hurt = this.mine().find((e) => e.isB && g.time - e.lastHit < 6 && e.lastAttacker && !e.lastAttacker.dead)
     if (hurt) {

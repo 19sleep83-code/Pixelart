@@ -225,7 +225,7 @@ export async function buildAssets(onProgress: (t: number, what: string) => void)
     for (const key of UNIT_ORDER) {
       jobs.push([`Einheiten: ${key}`, () => {
         const um = unitModel(key, f)
-        const inf = key === 'rifle' || key === 'at' || key === 'sniper'
+        const inf = key === 'rifle' || key === 'at' || key === 'sniper' || key === 'engineer'
         const dirs = inf ? 16 : 32
         const hull = new Rot(um.hull, dirs)
         const art: UnitArt = {

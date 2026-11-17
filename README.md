@@ -60,14 +60,14 @@ Hinter dem Menü läuft eine echte Schlacht zwischen zwei Computergegnern. Einst
 | Werft | 1200 | Rohstoffdepot | Schiffe; muss am Ufer stehen, darf weiter weg von der Basis sein |
 | Hubschrauberplatz | 1200 | Radarstation | Kampfhubschrauber |
 | Flugfeld | 1800 | Radarstation | Kampfjets, drei Stellplätze |
-| MG-Bunker | 500 | Kaserne | Abwehr gegen Infanterie |
+| MG-Bunker | 500 | Kaserne | Abwehr gegen Infanterie; bis zu 3 Soldaten steigen ein und schießen mit |
 | Raketenstellung | 750 | Fahrzeugwerk | Abwehr gegen Panzer, Schiffe und Luft |
 
 ### Einheiten
 
 | Reiter | Einheiten |
 | --- | --- |
-| Infanterie | Schütze, Panzerabwehr, Scharfschütze (unsichtbar, solange er stillhält) |
+| Infanterie | Schütze, Panzerabwehr, Scharfschütze (unsichtbar, solange er stillhält), Pionier (erobert feindliche Gebäude) |
 | Fahrzeuge | Erzlaster, Spähwagen, Schützenpanzer, Kampfpanzer, Flakpanzer, Rohrartillerie, Raketenartillerie |
 | Luft | Kampfhubschrauber, Kampfjet (Luftschlag, danach zurück zum Aufmunitionieren) |
 | See | Patrouillenboot, Korvette, Zerstörer bzw. Raketenkreuzer, Landungsschiff (5 Plätze), Flugzeugträger (3 eigene Jets) |
@@ -79,6 +79,7 @@ Die Fahrzeuge tragen die Namen realer Vorbilder:
 | Infanterie | Grenadier (G36) | Schütze (AK-74) |
 | Panzerabwehr | Panzerfaust 3 | RPG-7 |
 | Scharfschütze | G22 | SWD |
+| Pionier | Pionier | Pionier (Sapjor) |
 | Erzlaster | MAN | KAMAZ |
 | Spähwagen | Fennek | BRDM-2 |
 | Schützenpanzer | Marder 1A5 | BMP-2 |
@@ -94,6 +95,21 @@ Die Fahrzeuge tragen die Namen realer Vorbilder:
 | Landungsschiff | LCU 1700 | Ondatra |
 | Flugzeugträger | Nimitz | Admiral Kusnezow |
 
+### Häuser besetzen
+
+Infanterie kann die Häuser der Dörfer (Wohnhaus und Fachwerkhaus 4, Scheune 3, Kirche 6 Plätze) und die
+eigenen MG-Bunker (3 Plätze) besetzen. Drinnen gilt:
+
+- **Deckung:** nur 30 % des Schadens kommen bei den Insassen an. Die Häuser selbst sind unzerstörbar,
+  ein gesprengter Bunker wirft seine Besatzung mit halbem Leben hinaus.
+- **Reichweite und Sicht:** Wohnhaus +1,5 / +2, Scheune +1 / +1,5, Kirche (Turm) +2,5 / +4, Bunker +1 / +1.
+- **Unsichtbar:** Der Feind sieht nur die Fahne auf dem Dach – bis Mündungsfeuer die Schützen verrät
+  oder ein Gegner direkt am Haus steht. Ein gezielter Angriffsbefehl aufs Haus trifft die Insassen trotzdem.
+- **Pioniere** erobern feindliche Gebäude: Rechtsklick auf das Gebäude, der Pionier geht hinein und
+  das Gebäude wechselt die Seite (Besatzung eines Bunkers muss hinaus).
+
+Die KI besetzt Häuser in Basisnähe und schickt ab der mittleren Stufe gelegentlich Pioniere los.
+
 Die beiden Seiten unterscheiden sich in Aussehen und Werten: NATO hat mehr Reichweite und
 Präzision, Russland mehr Panzerung und niedrigere Preise. Fährt die Maus über ein Feld im Baumenü, erscheint die
 vollständige Datenkarte mit Schaden, Reichweite, Panzerung und Zielen.
@@ -107,6 +123,10 @@ vollständige Datenkarte mit Schaden, Reichweite, Panzerung und Zielen.
 | Rechtsklick aufs eigene Landungsschiff | Bodentruppen steigen ein (das Schiff kommt ans Ufer) |
 | Landungsschiff auf Land schicken / D | Truppen dort anlanden / hier entladen |
 | Jets + Rechtsklick | Luftschlag auf ein Ziel oder einen Punkt |
+| Infanterie + Rechtsklick aufs Haus / eigenen Bunker | Haus besetzen (Fahne zeigt den Besitzer, Kästchen die Belegung) |
+| Linksklick aufs eigene Haus / Doppelklick auf Bunker | die Insassen auswählen |
+| D (oder Knopf „Räumen“) | Haus bzw. Bunker räumen |
+| Pionier + Rechtsklick auf feindliches Gebäude | Gebäude erobern |
 | A + Linksklick | Angriffsbewegung |
 | S | Stopp |
 | F1–F5, Tab | Baureiter wechseln |

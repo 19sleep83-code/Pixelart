@@ -4,7 +4,8 @@
 // (trees, houses, ore, buildings, vehicles, wrecks), sorted back to front → helicopters → shells
 // and smoke → health bars → fog → the player's cursor work.
 
-import type { Game, Ent } from './game'
+import type { Game, Ent, Garrison } from './game'
+import { SCHEMES } from './colors'
 import type { Assets } from './assets'
 import { mountOffset } from './assets'
 import type { Terrain } from './terrain'
@@ -27,6 +28,7 @@ export interface Overlay {
   box?: { x0: number; y0: number; x1: number; y1: number }
   place?: { key: string; tx: number; ty: number; ok: boolean }
   hoverEnt?: Ent | null
+  hoverG?: Garrison | null
   moveMark?: { x: number; y: number; t: number; attack: boolean }
 }
 
@@ -111,7 +113,7 @@ export class Renderer {
         }
       } else {
         const s = this.toScreen(e.x, e.y, e.z)
-        if (e.carriedBy) continue
+        if (e.carriedBy || e.inside) continue
         const r = (e.u!.infantry ? 7 : e.naval ? (e.radius > 0.9 ? 26 : 17) : 13) * P
         const cy = s.y - (e.u!.infantry ? 8 : e.naval ? 8 : 6) * P
         if (Math.abs(px - s.x) <= r && Math.abs(py - cy) <= r) {
@@ -126,10 +128,113 @@ export class Renderer {
     return best
   }
 
+  /** a house (or bunker) that soldiers can hold under a screen pixel */
+  pickGarrison(px: number, py: number): Garrison | null {
+    const g = this.game
+    const N = g.map.N
+    let best: Garrison | null = null
+    let bk = -1e9
+    for (const h of g.garrisons) {
+      if (!g.fog[h.ty * N + h.tx]) continue
+      const top = h.kind === 'church' ? 40 : h.kind === 'bunker' ? 12 : 24
+      for (let z = 0; z <= top; z += 2) {
+        const w = unIso(px + this.cam.x, py + this.cam.y + z * KZ)
+        if (w.x >= h.tx && w.x < h.tx + h.w && w.y >= h.ty && w.y < h.ty + h.h) {
+          if (h.x + h.y > bk) {
+            bk = h.x + h.y
+            best = h
+          }
+          break
+        }
+      }
+    }
+    return best
+  }
+
+  private tops = new Map<Sprite, { h: number; dx: number }>()
+  /** the highest solid pixel of a sprite: how far above its foot, and how far to the side */
+  private topOf(sp: Sprite): { h: number; dx: number } {
+    let t = this.tops.get(sp)
+    if (t) return t
+    t = { h: sp.ay, dx: 0 }
+    const c = sp.cv.getContext('2d', { willReadFrequently: true })
+    if (c) {
+      const d = c.getImageData(0, 0, sp.w, sp.h).data
+      outer: for (let y = 0; y < sp.h; y++)
+        for (let x = 0; x < sp.w; x++)
+          if (d[(y * sp.w + x) * 4 + 3] > 100) {
+            t = { h: sp.ay - y, dx: x - sp.ax }
+            break outer
+          }
+    }
+    this.tops.set(sp, t)
+    return t
+  }
+
+  /** the top of the roof (or tower) a flag flies from */
+  private roofOf(h: Garrison): { h: number; dx: number } {
+    const g = this.game
+    if (h.b) return this.topOf(this.A.buildings[g.players[h.b.owner].faction][h.b.key].body)
+    const st = g.map.tileStatics[g.map.idx(h.tx, h.ty)]?.find((s) => s.kind === 'house' || s.kind === 'timber' || s.kind === 'church' || s.kind === 'barn')
+    if (!st) return { h: 24 * P, dx: 0 }
+    const arr = this.A.statics[st.kind]
+    return this.topOf(arr[st.v % arr.length].sp)
+  }
+
+  /** flags over the houses that are held, and how full they are */
+  private drawGarrisons(o: Overlay, scr: (x: number, y: number, z?: number) => { x: number; y: number }, onScreen: (x: number, y: number, m?: number) => boolean) {
+    const g = this.game
+    const ctx = this.ctx
+    const N = g.map.N
+    for (const h of g.garrisons) {
+      if (!onScreen(h.x, h.y)) continue
+      const seen = g.fog[h.ty * N + h.tx] === 2
+      const mineSel = h.occ.some((u) => u.selected)
+      const hover = o.hoverG === h
+      if ((mineSel || hover) && g.fog[h.ty * N + h.tx]) this.footprint(scr, h.tx, h.ty, h.w, h.h, mineSel ? 0x7dff6a : h.owner > 0 && h.occ.length ? 0xff5a4a : 0xd8ffd0, mineSel ? 1 : 0.7)
+      if (!h.occ.length || h.owner < 0 || (h.owner !== 0 && !seen)) continue
+      const roof = this.roofOf(h)
+      const base = scr(h.x, h.y)
+      base.x += roof.dx
+      const top = base.y - roof.h + 3 * P
+      const sc = SCHEMES[g.players[h.owner].faction]
+      // the pole and a flag in the wind
+      ctx.fillStyle = '#1a1c18'
+      ctx.fillRect(base.x, top - 14 * P, P, 14 * P)
+      const wave = Math.floor(g.time * 4 + h.id) % 2
+      for (let k = 0; k < 7; k++) {
+        const dy = (k + wave) % 4 < 2 ? 0 : P
+        ctx.fillStyle = css(k < 1 ? sc.teamDark : sc.team)
+        ctx.fillRect(base.x + P + k * P, top - 14 * P + dy, P, 4 * P)
+        ctx.fillStyle = css(sc.teamLight)
+        ctx.fillRect(base.x + P + k * P, top - 14 * P + dy, P, 1)
+      }
+      // our own: how many are inside
+      if (h.owner === 0) {
+        const w = h.cap * 4 * P - P
+        const x0 = base.x - Math.round(w / 2) + 4 * P
+        ctx.fillStyle = '#0c0e0a'
+        ctx.fillRect(x0 - 1, top - 20 * P - 1, w + 2, 3 * P + 2)
+        for (let i = 0; i < h.cap; i++) {
+          ctx.fillStyle = i < h.occ.length ? '#e0b532' : '#3a3e34'
+          ctx.fillRect(x0 + i * 4 * P, top - 20 * P, 3 * P, 3 * P)
+        }
+        // the weakest of them, as a bar
+        const k = Math.min(...h.occ.map((u) => u.hp / u.maxHp))
+        if (k < 1) {
+          ctx.fillStyle = '#0c0e0a'
+          ctx.fillRect(x0 - 1, top - 16 * P, w + 2, 2 * P + 1)
+          ctx.fillStyle = k > 0.6 ? '#5fd65a' : k > 0.3 ? '#e8c03a' : '#e2492f'
+          ctx.fillRect(x0, top - 16 * P + 1, Math.max(1, Math.round(w * k)), 2 * P - 1)
+        }
+      }
+    }
+  }
+
   /** is an entity of another player drawn */
   shown(e: Ent): boolean {
     const g = this.game
-    if (e.carriedBy) return false
+    if (e.carriedBy || e.inside) return false
     if (e.owner === 0) return true
     if (e.hidden && !g.visibleTo(0, e)) return false
     const N = g.map.N
@@ -244,7 +349,7 @@ export class Renderer {
 
     // markers on the ground: selection rings, building outlines, rally points
     for (const e of g.ents) {
-      if (e.dead || e.carriedBy || !onScreen(e.x, e.y)) continue
+      if (e.dead || e.carriedBy || e.inside || !onScreen(e.x, e.y)) continue
       const hover = o.hoverEnt === e
       if (!e.selected && !hover) continue
       if (e.owner !== 0 && !this.shown(e)) continue
@@ -547,7 +652,7 @@ export class Renderer {
 
     // health bars
     for (const e of g.ents) {
-      if (e.dead || e.carriedBy || !onScreen(e.x, e.y)) continue
+      if (e.dead || e.carriedBy || e.inside || !onScreen(e.x, e.y)) continue
       const show = e.selected || o.hoverEnt === e || (e.hp < e.maxHp && g.time - e.lastHit < 3)
       if (!show || !this.shown(e)) continue
       const k = Math.max(0, e.hp / e.maxHp)
@@ -587,6 +692,8 @@ export class Renderer {
         ctx.fillRect(Math.round(x), Math.round(y) + 6, Math.round((w * e.cargo) / HARVEST_LOAD), 2)
       }
     }
+
+    this.drawGarrisons(o, scr, onScreen)
 
     // fog of war
     if (g.fogDirty) {
@@ -773,7 +880,7 @@ export class Renderer {
     const N = g.map.N
     const blink = Math.floor(g.time * 1.5) % 2 === 0
     for (const e of g.ents) {
-      if (e.dead || e.carriedBy || !onScreen(e.x, e.y) || !this.shown(e)) continue
+      if (e.dead || e.carriedBy || e.inside || !onScreen(e.x, e.y) || !this.shown(e)) continue
       if (e.isB) {
         if (e.built < 1) continue
         const n = Math.min(2, e.w + e.h - 2)
