@@ -7,7 +7,7 @@
 import { buildAssets, mountOffset, type Assets } from './game/assets'
 import type { Rot, Sprite } from './core/voxel'
 import { SCALE, TW, TH, KZ, VOX_PER_TILE } from './core/iso'
-import { UNIT_ORDER, BUILD_ORDER, PLANNED_ORDER, RULES, VS, ARMOR_NAME, unitDefs, plannedUnitDefs, buildingDefs, type UnitDef } from './game/defs'
+import { UNIT_ORDER, BUILD_ORDER, PLANNED_ORDER, PLANNED_CHANGES, RULES, VS, ARMOR_NAME, unitDefs, plannedUnitDefs, buildingDefs, type UnitDef } from './game/defs'
 import { GSPEC, COVER } from './game/game'
 import REGELWERK from '../docs/REGELWERK.md?raw'
 import { buildTiles } from './tiles'
@@ -328,6 +328,7 @@ async function exportAll(A: Assets, log: (s: string) => void) {
     note: 'Werte gelten für beide Fraktionen; Namen und Rollenbezeichnung je Fraktion unter names. planned = nur für Godot vorbereitet.',
     order: UNIT_ORDER,
     planned: PLANNED_ORDER,
+    plannedChanges: PLANNED_CHANGES,
     units: Object.fromEntries(keys.map((k) => [k, strip(all('nato')[k])])),
     names: Object.fromEntries((['nato', 'ru'] as Faction[]).map((f) => [f, Object.fromEntries(keys.map((k) => [k, { name: all(f)[k].name, role: all(f)[k].role }]))])),
     hullPerFaction: Object.fromEntries((['nato', 'ru'] as Faction[]).map((f) => [f, Object.fromEntries(keys.filter((k) => all(f)[k].hull).map((k) => [k, all(f)[k].hull]))])),

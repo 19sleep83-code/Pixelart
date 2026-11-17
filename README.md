@@ -171,7 +171,7 @@ Animationsregeln; die `README.md` im ZIP zeigt das Einrichten in Godot 4 mit GDS
 
 Außerdem im ZIP: das Gelände als Kachelsatz (374 Rauten mit Ufern, Straßen-Overlays, Hecken),
 Deko für die Karte (Zäune, Autos, Windräder, Tiere, Panzersperren …), die geplanten Einheiten
-Mörsertrupp und Sanitäter, fallende Soldaten, Turm-Schatten, Mündungsfeuer, Oberflächen-Grafik
+Mörsertrupp und Sanitäter, Jäger und Erdkampfflugzeuge (Eurofighter / Su-35, A-10 / Su-25), fallende Soldaten, Turm-Schatten, Mündungsfeuer, Oberflächen-Grafik
 (Symbole, Mauszeiger, Knöpfe, Fahnen, Ränge in ×1/×2/×3) sowie alle Werte als JSON und das Regelwerk.
 
 ## Noch offen

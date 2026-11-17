@@ -150,5 +150,16 @@ Gleich teure Gruppen (je 3000 Credits) gegeneinander, mehrere Karten, Seiten get
 
 - **Mörsertrupp:** Steilfeuer (Artillerie-Klasse), Reichweite 9, Mindestreichweite 2,5.
 - **Sanitäter:** unbewaffnet, heilt Infanterie im Umkreis von 2,5 Feldern um 6 Lebenspunkte pro Sekunde.
+- **Jäger und Erdkampfflugzeuge statt Kampfjet:** Der heutige Kampfjet (`jet`) teilt sich in zwei Flugzeuge,
+  die sich die 3 Stellplätze je Flugfeld teilen:
+  - **Jagdflugzeug** (`fighter`: Eurofighter Typhoon / Su-35): nur Luftziele, Reichweite 8, zwei Raketen
+    je Salve. Startet auf Befehl gegen ein Luftziel oder zur Patrouille über einem Punkt, außerdem
+    selbstständig, wenn feindliche Flugzeuge oder Hubschrauber eigenen Gebäuden nahe kommen.
+    Danach zurück zum Aufmunitionieren (6 s).
+  - **Erdkampfflugzeug** (`cas`: A-10 Thunderbolt II / Su-25 Frogfoot): ein Tiefflug-Anflug wie heute die
+    Jets, mit einer Salve von 8 Kanonentreffern (Klasse Kanone, gut gegen Panzer und Schiffe) auf ein
+    Boden- oder Seeziel, dann zurück zum Flugfeld. 480 Lebenspunkte, langsamer als der Jäger (4,5 statt 7,5).
+  - Die Werte sind aus den heutigen Jets abgeleitet und noch nicht per Simulation geprüft, weil das
+    Verhalten erst in Godot entsteht.
 - **Touch-Steuerung:** Tippen wählt aus bzw. gibt einen Befehl, ein Knopf schaltet auf „Rahmen ziehen“,
   ein Finger schiebt die Karte, zwei Finger zoomen.

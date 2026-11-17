@@ -240,9 +240,28 @@ export function plannedUnitDefs(f: Faction): Record<string, UnitDef> {
       cost: 250, time: 6, hp: 60, armor: 'inf', speed: 0.9, turn: 0, sight: 6, radius: 0.2,
       queue: 'inf', producer: 'barracks', req: ['barracks'], infantry: true, heal: { rate: 6, range: 2.5 }, planned: true,
     },
+    // in the next version the strike jet splits in two: a fighter for the air, a ground-attack plane for the ground
+    fighter: {
+      key: 'fighter', name: nato ? 'Eurofighter Typhoon' : 'Su-35', role: 'Jagdflugzeug',
+      desc: 'Luftüberlegenheit: fängt Hubschrauber und Flugzeuge ab, greift keine Bodenziele an. Startet auf Befehl oder bei Feindflugzeugen nahe der Basis und kehrt zum Aufmunitionieren zurück.',
+      cost: 1500, time: 16, hp: 260, armor: 'air', speed: 7.5, turn: 2.8, sight: 9, radius: 0.55,
+      weapon: { cls: 'missile', proj: 'missile', dmg: 95, range: 8, reload: 5, burst: 2, gap: 0.3, ground: false, air: true, sea: false },
+      queue: 'air', producer: 'airfield', req: ['airfield'], air: true, jet: true, planned: true,
+    },
+    cas: {
+      key: 'cas', name: nato ? 'A-10 Thunderbolt II' : 'Su-25 Frogfoot', role: 'Erdkampfflugzeug',
+      desc: 'Panzerknacker: ein Tiefflug-Anflug mit Bordkanone und Raketen auf ein Bodenziel oder Schiff, dann zurück zum Flugfeld. Stark gepanzert, langsamer als ein Jäger.',
+      cost: 1600, time: 18, hp: 480, armor: 'air', speed: 4.5, turn: 2.2, sight: 7, radius: 0.6,
+      weapon: { cls: 'cannon', proj: 'shell', dmg: 42, range: 6, reload: 6, burst: 8, gap: 0.06, splash: 0.3, ground: true, air: false, sea: true },
+      queue: 'air', producer: 'airfield', req: ['airfield'], air: true, jet: true, planned: true,
+    },
   }
 }
-export const PLANNED_ORDER = ['mortar', 'medic']
+export const PLANNED_ORDER = ['mortar', 'medic', 'fighter', 'cas']
+/** what the next version changes about units that exist today */
+export const PLANNED_CHANGES = {
+  jet: 'Wird in der Godot-Version durch zwei Flugzeuge ersetzt: fighter (Jäger, nur Luftziele; russisch Su-35 statt Su-34) und cas (Erdkampf: A-10 / Su-25, ein Anflug gegen Boden- und Seeziele). Beide teilen sich die 3 Stellplätze je Flugfeld.',
+}
 
 export function buildingDefs(): Record<string, BuildingDef> {
   return {

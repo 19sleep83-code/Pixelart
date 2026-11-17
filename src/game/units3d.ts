@@ -1347,6 +1347,176 @@ function su34(): Vox {
   return m
 }
 
+/** A-10 Thunderbolt II: straight wings, the engines high on the back, the twin tail, the GAU-8 in the nose */
+function a10(): Vox {
+  const s = SCHEMES.nato
+  const c = hex('6e767a'), c2 = hex('8a9296'), dk = hex('50585c')
+  const m = new Vox(38, 37, 12)
+  const cx = 18.5
+  // the fuselage, a blunt nose, the gun's muzzle under it
+  m.box(cx - 1.5, 6, 1.5, cx + 1.5, 30, 4, c)
+  m.box(cx - 1.5, 6, 1.5, cx + 1.5, 30, 1.5, c2)
+  m.box(cx - 1, 31, 2, cx + 1, 33, 3.5, c)
+  m.box(cx - 0.5, 34, 2.5, cx + 0.5, 34, 3, dk)
+  m.rod(cx - 0.25, 33, 1.75, cx - 0.25, 36, 1.75, GUN) // GAU-8 Avenger
+  m.dot(cx - 0.25, 36.25, 1.75, hex('1a1c1a'))
+  // the bubble canopy and the pilot
+  m.box(cx - 1, 26, 4.5, cx + 1, 29, 5.5, s.glass)
+  pilot(m, cx - 0.5, 27.5, 6)
+  // straight wings, low on the fuselage, drooping tips, darker flaps
+  for (let x = 0.5; x <= 36.5; x += 0.5) {
+    const d = Math.abs(x - cx)
+    if (d < 1.5) continue
+    const y0 = 14 + d * 0.04, y1 = 19.5 - d * 0.06
+    m.box(x, y0, 2, x, y1, 2, d > 17 ? dk : c)
+    m.box(x, y0, 2, x, y0 + 0.5, 2, dk) // flaps
+  }
+  // the engines on pylons high on the rear fuselage
+  for (const ex of [cx - 4, cx + 4]) {
+    m.box(ex - 0.5, 8, 4, ex + 0.5, 10, 5, c)
+    m.cylY(ex, 6, 1.8, 3, 11, c2)
+    m.cylY(ex, 6, 1.1, 11, 11.5, dk) // intake
+    m.cylY(ex, 6, 1, 2.5, 3, hex('2a2a28')) // exhaust
+  }
+  // the tailplane with the two fins at its ends
+  m.box(9, 0, 3, 28, 3.5, 3, c)
+  for (const fx of [9, 28]) {
+    for (let z = 3; z <= 9; z++) m.box(fx, 0 + (z > 7 ? 0.5 : 0), z, fx, 4 - Math.max(0, z - 6) * 0.5, z, c)
+    m.box(fx, 1, 7, fx, 2, 7.5, s.team)
+  }
+  // landing gear fairings under the wings
+  for (const gx of [cx - 5, cx + 5]) m.box(gx, 16, 1, gx + 1, 21, 1.5, dk)
+  // eleven pylons: Mavericks, bombs and rocket pods
+  for (const x of [3, 33]) {
+    m.cylY(x, 1, 0.8, 13, 19, hex('5a6248')) // LAU-131 rocket pods
+    m.dot(x, 19.5, 1, hex('1a1c1a'))
+  }
+  for (const x of [7, 29]) {
+    m.box(x, 14, 0.5, x + 0.5, 19, 1, hex('8a8e7a')) // Mavericks
+    m.dot(x + 0.25, 19.5, 0.75, COL.white)
+  }
+  for (const x of [11, 25]) {
+    m.box(x - 0.5, 14.5, 0.5, x + 0.5, 18.5, 1.5, hex('5a5e52')) // bombs
+    m.box(x - 0.5, 14, 1, x + 0.5, 14, 1.5, GUN)
+  }
+  m.box(cx - 0.5, 16, 0.5, cx + 0.5, 20, 1, hex('4a4e48')) // the ECM pod
+  navLights(m, 0.5, 36.5, 17, 1.5)
+  m.dot(cx, 0, 4.5, NAV_WHITE, true)
+  m.px = cx
+  m.py = 17
+  return m
+}
+
+/** Su-25 Frogfoot: shoulder wings with pods at the tips, engines in the wing roots, a long sharp nose; camouflage above, pale blue below */
+function su25(): Vox {
+  const s = SCHEMES.ru
+  const sky = hex('8ab0c8')
+  const m = new Vox(32, 35, 11)
+  const cx = 15.5
+  m.box(cx - 1, 5, 1.5, cx + 1, 27, 4, sky)
+  for (let y = 27; y <= 33; y++) {
+    const k = (33 - y) / 6
+    m.box(cx - k, y, 2 + (1 - k), cx + k, y, 2.5 + k * 1.5, sky)
+  }
+  m.rod(cx, 33, 2.75, cx, 34.5, 2.75, GUN) // the pitot
+  m.dot(cx, 32.5, 2.25, hex('3a2a1a')) // laser window
+  m.box(cx - 1, 23, 4.5, cx + 1, 26, 5.5, s.glass)
+  pilot(m, cx - 0.5, 24.5, 6)
+  // the engine nacelles along the wing roots
+  for (const ex of [cx - 3, cx + 3]) {
+    m.box(ex - 1, 7, 1.5, ex + 1, 21, 4, sky)
+    m.box(ex - 1, 21, 2, ex + 1, 21, 3.5, hex('2a2a28')) // intakes
+    m.box(ex - 0.5, 6.5, 2, ex + 0.5, 6.5, 3, hex('3a3634')) // nozzles
+  }
+  // the shoulder wings, slightly swept, with the speed-brake pods at the tips
+  for (let x = 0.5; x <= 30.5; x += 0.5) {
+    const d = Math.abs(x - cx)
+    if (d < 1) continue
+    const y0 = 13 + d * 0.2, y1 = 17.5 - d * 0.03
+    m.box(x, y0, 4, x, y1, 4, sky)
+  }
+  for (const tx of [0.5, 30]) m.box(tx, 14.5, 3.5, tx + 0.5, 18.5, 4.5, hex('6a6a5a'))
+  // single fin, tailplane, the sting
+  for (let z = 4; z <= 10; z++) m.box(cx - 0.5, 1 + (z - 4) * 0.5, z, cx, 6 - (z - 4) * 0.4, z, sky)
+  for (let y = 1; y <= 3.5; y += 0.5) m.box(cx - 3.5 - (3.5 - y) * 0.6, y, 4, cx + 3.5 + (3.5 - y) * 0.6, y, 4, sky)
+  m.rod(cx - 0.25, 1, 3, cx - 0.25, 0, 3, GUN)
+  // camouflage on the upper side, pale blue underneath
+  m.paint((x, y, z, c) => {
+    if (c !== sky || z < 3.5) return c
+    const n = valueNoise(x, y, 5, 251)
+    return n < 0.33 ? hex('7a6a48') : n < 0.6 ? hex('5d6a3c') : hex('a89a6a')
+  })
+  m.box(cx - 0.5, 7, 7, cx - 0.5, 8, 7.5, s.team)
+  // ten pylons: B-8 rocket pods, bombs, missiles
+  for (const x of [5, 26]) {
+    m.cylY(x, 2.5, 1, 12, 17, hex('6a6e6a'))
+    m.dot(x, 17.5, 2.5, hex('1a1c1a'))
+  }
+  for (const x of [8.5, 22.5]) {
+    m.box(x - 0.5, 13, 2, x + 0.5, 17, 3, hex('4a4e44'))
+    m.box(x - 0.5, 12.5, 2.5, x + 0.5, 12.5, 3, GUN)
+  }
+  for (const x of [11, 20]) {
+    m.box(x, 12, 1.5, x + 0.5, 17, 2, hex('9aa09a')) // Kh-25 missiles
+    m.dot(x + 0.25, 17.5, 1.75, COL.white)
+  }
+  navLights(m, 0.5, 30.5, 15, 4.5)
+  m.dot(cx, 1, 10.5, NAV_WHITE, true)
+  m.px = cx
+  m.py = 16
+  return m
+}
+
+/** Su-35 Flanker-E: a wide lifting body, two engines far apart, big swept wings, twin fins, the IRST ball before the canopy */
+function su35(): Vox {
+  const s = SCHEMES.ru
+  const c = s.jet, c2 = s.jet2
+  const m = new Vox(32, 41, 11)
+  const cx = 15.5
+  // the long nose with its radome and the cockpit
+  for (let y = 26; y <= 38; y++) {
+    const k = y > 33 ? (38 - y) / 5 : 1
+    m.box(cx - 1.5 * k, y, 2.5 - k * 0.5, cx + 1.5 * k, y, 3 + k, y > 34 ? shade(c, 0.85) : c)
+  }
+  m.box(cx - 1, 27, 4.5, cx + 1, 31, 5.5, s.glass)
+  pilot(m, cx - 0.5, 29, 6)
+  m.ball(cx, 32, 4.25, 0.6, 0.6, 0.6, s.glass) // IRST
+  // the lifting body and the engines
+  m.box(cx - 5, 4, 1.5, cx + 5, 26, 2.5, c)
+  for (const ex of [cx - 4, cx + 4]) {
+    m.box(ex - 1.5, 2, 1, ex + 1.5, 20, 3, c2)
+    m.box(ex - 1.5, 20, 1, ex + 1.5, 20, 2.5, hex('2a2a28')) // intakes under the body
+    m.cylY(ex, 2, 1.2, 0.5, 2, hex('3a3a38')) // nozzles
+    m.dot(ex, 0.5, 2, hex('ff9a3a'), true)
+  }
+  // big swept wings
+  for (let y = 8; y <= 23; y += 0.5) {
+    const hs = 5 + (23 - y) * 0.68
+    m.box(cx - hs, y, 2, cx + hs, y, 2, (y * 2) % 7 === 0 ? c2 : c)
+  }
+  // tailerons, twin fins, the sting
+  for (let y = 0; y <= 5; y += 0.5) {
+    const hs = 6 + (5 - y) * 1.2
+    m.box(cx - hs, y, 2, cx - 5.5, y, 2, c)
+    m.box(cx + 5.5, y, 2, cx + hs, y, 2, c)
+  }
+  for (const fx of [cx - 4, cx + 4]) for (let z = 3; z <= 10; z++) m.box(fx, 3 + (z - 3) * 0.6, z, fx, 9 - (z - 3) * 0.2, z, c2)
+  m.box(cx - 4, 6, 7, cx - 4, 7, 8, s.team)
+  m.box(cx + 4, 6, 7, cx + 4, 7, 8, s.team)
+  m.box(cx - 0.5, 0, 1.5, cx + 0.5, 4, 2.5, c) // the tail sting
+  // R-77 under the wings, R-73 at the tips
+  for (const x of [cx - 9, cx - 6.5, cx + 6.5, cx + 9]) {
+    m.box(x, 10, 1, x + 0.5, 15, 1.5, COL.white)
+    m.dot(x + 0.25, 10, 1.75, GUN)
+  }
+  for (const x of [cx - 15.5, cx + 15]) m.box(x, 9, 2, x + 0.5, 13, 2.5, hex('c8cac0'))
+  navLights(m, 0.5, 30.5, 9.5, 2.5)
+  m.dot(cx, 0, 2.75, NAV_WHITE, true)
+  m.px = cx
+  m.py = 18
+  return m
+}
+
 // ─────────────────────────────────────────────────────────── ships
 
 /** a hull with a pointed bow, a flared sheer and a dark waterline */
@@ -1742,6 +1912,10 @@ export function unitModel(key: string, f: Faction): UnitModel {
       return nato ? apache() : hind()
     case 'jet':
       return { hull: nato ? eurofighter() : su34(), muzzle: [10, 0] }
+    case 'fighter':
+      return { hull: nato ? eurofighter() : su35(), muzzle: [10, 0] }
+    case 'cas':
+      return { hull: nato ? a10() : su25(), muzzle: [12, 1] }
     case 'boat':
       return patrolBoat(f)
     case 'corvette': {
