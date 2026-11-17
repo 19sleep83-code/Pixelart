@@ -158,6 +158,16 @@ vollständige Datenkarte mit Schaden, Reichweite, Panzerung und Zielen.
 
 `preview.html` (nur im Dev-Server) zeigt alle Modelle nebeneinander.
 
+### Sprite-Export für Godot
+
+`export.html` (nur im Dev-Server: `npm run dev`, dann `/export.html` öffnen) rendert alle Modelle
+und packt sie als PNG-Sprite-Sheets in `pixelfront_sprites.zip`: Einheiten beider Fraktionen in
+32 Richtungen (Infanterie 16) mit Schatten, Türmen, Ketten- und Radar-Animation, Geh- und
+Zielposen, Wracks und Icons; Gebäude, Landschaft, Erz, Explosionen, Rauch, Feuer und das Logo.
+`manifest.json` beschreibt Zellgröße, Ankerpunkt, Richtungen, Turm-Versatz je Richtung und die
+Animationsregeln; die `README.md` im ZIP zeigt das Einrichten in Godot 4 mit GDScript.
+Ändert sich ein Modell, einfach neu exportieren.
+
 ## Noch offen
 
 - Ton und Musik

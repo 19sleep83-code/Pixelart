@@ -1,0 +1,18 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Pixelfront Sprite-Export</title>
+<style>
+body{background:#1b1f19;color:#d8dccf;font:14px/1.5 monospace;margin:0;padding:24px}
+h1{font-size:18px;margin:0 0 12px}
+.track{height:8px;background:#30362c;margin:12px 0;max-width:600px}
+#bar{height:100%;width:0;background:#9cc46a}
+#log{white-space:pre;max-height:60vh;overflow:auto;background:#12150f;padding:12px;max-width:600px}
+a{display:inline-block;margin-top:12px;padding:10px 16px;background:#9cc46a;color:#12150f;text-decoration:none;font-weight:bold}
+.hidden{display:none}
+</style></head>
+<body>
+<h1>Pixelfront – Sprite-Export für Godot</h1>
+<div>Rendert alle Modelle und packt sie als PNG-Sprite-Sheets mit manifest.json in eine ZIP-Datei.</div>
+<div class="track"><div id="bar"></div></div>
+<div id="log"></div>
+<a id="dl" class="hidden" href="#">ZIP herunterladen</a>
+<script type="module" src="/src/export.ts"></script>
+</body></html>
