@@ -18,12 +18,18 @@ const CHOICES := [
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var k := UiTheme.scale_for(get_viewport_rect().size)
 	theme = UiTheme.make(k)
 	opts["seed"] = randi_range(1, 99999)
+	# the last choices (the prototype keeps them in localStorage)
+	for c in CHOICES:
+		var v: Variant = Settings.get_value("menu", c[0], opts[c[0]])
+		for o in c[2]:
+			if typeof(o[0]) == typeof(v) and o[0] == v:
+				opts[c[0]] = v
 	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 	var panel := PanelContainer.new()
 	center.add_child(panel)
@@ -31,7 +37,16 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 6 * k)
 	panel.add_child(box)
 	var logo := TextureRect.new()
-	logo.texture = Data.tex(Data.manifest.get("title", {}).get("file", "ui/title.png"))
+	var title := Data.tex(Data.manifest.get("title", {}).get("file", "ui/title.png"))
+	# only the lettering (the picture has room around it for the glow)
+	var used := title.get_image().get_used_rect() if title else Rect2i()
+	if used.has_area():
+		var at := AtlasTexture.new()
+		at.atlas = title
+		at.region = Rect2(used.grow(2))
+		logo.texture = at
+	else:
+		logo.texture = title
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	logo.custom_minimum_size = Vector2(0, 70 * k)
 	box.add_child(logo)
@@ -75,9 +90,41 @@ func _ready() -> void:
 	go.text = "Gefecht beginnen"
 	go.custom_minimum_size = Vector2(0, 22 * k)
 	go.pressed.connect(_go)
+	go.focus_mode = Control.FOCUS_NONE
 	box.add_child(go)
+	# the controls, folded away like the prototype's <details>
+	var help_btn := Button.new()
+	help_btn.text = "Steuerung"
+	help_btn.toggle_mode = true
+	help_btn.focus_mode = Control.FOCUS_NONE
+	box.add_child(help_btn)
+	var help := Label.new()
+	help.text = HELP_TOUCH if UiTheme.is_touch() else HELP
+	help.add_theme_font_size_override("font_size", 6 * k)
+	help.add_theme_color_override("font_color", UiTheme.DIM)
+	help.visible = false
+	box.add_child(help)
+	help_btn.toggled.connect(func(on: bool) -> void: help.visible = on)
+
+
+const HELP := """Linksklick / Rahmen ziehen – auswählen (Umschalt: hinzufügen, Doppelklick: alle gleichen im Bild)
+Rechtsklick – bewegen, angreifen, Erz abbauen, Haus besetzen, Sammelpunkt setzen
+Rechtsklick aufs eigene Landungsschiff – einsteigen · D – entladen / Haus räumen
+A + Linksklick – Angriffsbewegung · S – Stopp
+F1–F5, Tab – Baureiter · Y X C V B N M , . - – Felder im Baumenü (Rechtsklick: abbrechen)
+Strg + 1–9 – Gruppe bilden · 1–9 – Gruppe wählen (zweimal: hinspringen)
+Q – ganze Armee · E – Kampfeinheiten im Bild · Leertaste – zur Auswahl · H – Hauptquartier
+Pfeiltasten, Bildschirmrand, mittlere Maustaste – Ansicht · Mausrad – Zoom · P – Pause"""
+const HELP_TOUCH := """Tippen – auswählen (zweimal: alle gleichen im Bild)
+Mit Auswahl tippen – bewegen, angreifen, Erz abbauen, Haus besetzen, Sammelpunkt
+Lange drücken – Angriffsbewegung
+Rahmen-Knopf – mit einem Finger mehrere auswählen · X-Knopf – abwählen
+Ein Finger ziehen – Karte schieben · zwei Finger – zoomen
+Baumenü lange drücken – Auftrag abbrechen"""
 
 
 func _go() -> void:
 	opts["seed"] = clampi(int(_seed_edit.text), 1, 99999)
+	for c in CHOICES:
+		Settings.set_value("menu", c[0], opts[c[0]])
 	start.emit(opts.duplicate())

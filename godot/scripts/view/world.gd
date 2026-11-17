@@ -86,6 +86,9 @@ var overlay := {"box": null, "place": null, "hover_ent": null, "hover_g": null, 
 var auto_draw := true
 ## the game stands still (no rain falling, no fog of time)
 var paused := false
+## screen pixels at the right edge covered by the interface (the sidebar): the camera may go that
+## much further east, so the edge of the map can be seen beside it (the prototype's canvas ended there)
+var view_inset_right := 0.0
 ## time the last redraw took (ms)
 var draw_ms := 0.0
 ## set to a Dictionary to gather the time (µs) of each part of redraw()
@@ -353,7 +356,7 @@ func clamp_camera() -> void:
 	var half := N * 64.0 / 2.0
 	var cx := camera.position.x - vs.x / 2.0
 	var cy := camera.position.y - vs.y / 2.0
-	cx = maxf(-half - 40 * P, minf(half - vs.x + 40 * P, cx))
+	cx = maxf(-half - 40 * P, minf(half - vs.x + 40 * P + view_inset_right / zoom, cx))
 	cy = maxf(-40 * P, minf(N * 32.0 - vs.y + 40 * P, cy))
 	camera.position = Vector2(roundf(cx) + vs.x / 2.0, roundf(cy) + vs.y / 2.0)
 
@@ -416,6 +419,12 @@ func pick_garrison(px: Vector2) -> Game.Garrison:
 					best = h
 				break
 	return best
+
+
+## the fog of war as a texture of N × N tiles (darkness in the red channel; FOG_SHADER colours it),
+## for the situation map
+func fog_texture() -> Texture2D:
+	return _fog_tex
 
 
 ## is an entity drawn (own ones always, others when seen)
