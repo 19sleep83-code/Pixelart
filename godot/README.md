@@ -92,3 +92,6 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 --resolution 1600x900 
   Vorlage *Android* hinzufügen. Die Steuerung erkennt Touch automatisch (Tippen, Ziehen, Zwei-Finger-Zoom,
   Knopf für den Auswahlrahmen).
 - **iOS:** braucht einen Mac mit Xcode.
+- **Windows-Setup:** im Hauptordner `tools/build-windows-setup.sh <version> <godot>` → `build/Pixelfront-Setup-<version>.exe`
+  (Assistent auf Deutsch, Startmenü/Desktop-Verknüpfung, Deinstallation).
+- **Export prüfen:** `Pixelfront -- --schnellstart [seed]` startet ohne Menü direkt ein Gefecht (Küstenkarte).

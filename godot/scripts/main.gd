@@ -9,6 +9,13 @@ var _menu_layer: CanvasLayer
 func _ready() -> void:
 	UiTheme.install_cursors(UiTheme.scale_for(get_viewport().get_visible_rect().size))
 	Sound.enabled = bool(Settings.get_value("audio", "sound", true))
+	# "Pixelfront -- --schnellstart [seed]" goes straight into a battle (for checking an exported build)
+	var args := OS.get_cmdline_user_args()
+	var i := args.find("--schnellstart")
+	if i >= 0:
+		var seed := int(args[i + 1]) if args.size() > i + 1 else 4711
+		start_battle({"faction": "nato", "difficulty": 1, "mapType": "coast", "tod": "day", "weather": "clouds", "seed": maxi(1, seed)})
+		return
 	show_menu()
 
 
