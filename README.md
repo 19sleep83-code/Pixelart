@@ -110,8 +110,9 @@ eigenen MG-Bunker (3 Plätze) besetzen. Drinnen gilt:
 
 Die KI besetzt Häuser in Basisnähe und schickt ab der mittleren Stufe gelegentlich Pioniere los.
 
-Die beiden Seiten unterscheiden sich in Aussehen und Werten: NATO hat mehr Reichweite und
-Präzision, Russland mehr Panzerung und niedrigere Preise. Fährt die Maus über ein Feld im Baumenü, erscheint die
+Beide Seiten haben **identische Werte**, sie unterscheiden sich nur in Namen und Aussehen. Die Werte
+sind per Simulation ausbalanciert (gleich teure Gruppen gegeneinander), sodass jede Einheit klare
+Ziele und klare Konter hat; Details in [`docs/REGELWERK.md`](docs/REGELWERK.md). Fährt die Maus über ein Feld im Baumenü, erscheint die
 vollständige Datenkarte mit Schaden, Reichweite, Panzerung und Zielen.
 
 ## Steuerung
@@ -167,6 +168,11 @@ Zielposen, Wracks und Icons; Gebäude, Landschaft, Erz, Explosionen, Rauch, Feue
 `manifest.json` beschreibt Zellgröße, Ankerpunkt, Richtungen, Turm-Versatz je Richtung und die
 Animationsregeln; die `README.md` im ZIP zeigt das Einrichten in Godot 4 mit GDScript.
 Ändert sich ein Modell, einfach neu exportieren.
+
+Außerdem im ZIP: das Gelände als Kachelsatz (374 Rauten mit Ufern, Straßen-Overlays, Hecken),
+Deko für die Karte (Zäune, Autos, Windräder, Tiere, Panzersperren …), die geplanten Einheiten
+Mörsertrupp und Sanitäter, fallende Soldaten, Turm-Schatten, Mündungsfeuer, Oberflächen-Grafik
+(Symbole, Mauszeiger, Knöpfe, Fahnen, Ränge in ×1/×2/×3) sowie alle Werte als JSON und das Regelwerk.
 
 ## Noch offen
 

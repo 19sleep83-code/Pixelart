@@ -90,6 +90,8 @@ export class Terrain {
   private A: Assets | null = null
   private cols: number
   private rows: number
+  /** without the large soft patches of colour (for tiles that must fit any neighbour) */
+  flat = false
 
   constructor(public map: GameMap) {
     const N = map.N
@@ -145,6 +147,7 @@ export class Terrain {
     const h = hash2(vx, vy, seed)
     const t = m.ter[i]
     const nb = this.nb[i]
+    const vn = (x: number, y: number, cell: number, s: number) => (this.flat ? 0.5 : valueNoise(x, y, cell, s))
     let c: number
     if (t === Ter.Water || t === Ter.Bridge) {
       const d = edgeDist(nb, u, v)
@@ -152,9 +155,9 @@ export class Terrain {
       if (d < 0.08) c = this.sandy[i] ? WET_SAND : BANK
       else if (d < 0.14) c = mix(this.sandy[i] ? WET_SAND : BANK, WATER_SHALLOW, 0.5)
       else if (d < 0.32) c = WATER_SHALLOW
-      else if (dep >= 6) c = valueNoise(wx, wy, 4, seed + 4) > 0.5 ? WATER_DEEPEST : shade(WATER_DEEPEST, 1.06)
-      else if (dep >= 3) c = valueNoise(wx, wy, 3, seed + 4) > 0.45 ? WATER_DEEP : WATER
-      else c = valueNoise(wx, wy, 3, seed + 4) > 0.55 ? WATER_DEEP : WATER
+      else if (dep >= 6) c = vn(wx, wy, 4, seed + 4) > 0.5 ? WATER_DEEPEST : shade(WATER_DEEPEST, 1.06)
+      else if (dep >= 3) c = vn(wx, wy, 3, seed + 4) > 0.45 ? WATER_DEEP : WATER
+      else c = vn(wx, wy, 3, seed + 4) > 0.55 ? WATER_DEEP : WATER
       // ripples
       if (d >= 0.14 && (vx + vy * 3) % 19 === 0 && h < 0.4) c = shade(c, 1.15)
       if (t === Ter.Bridge) {
@@ -190,7 +193,7 @@ export class Terrain {
         break
       default: {
         c = GRASS[m.variant[i] % 3]
-        const n = valueNoise(wx, wy, 5, seed + 1)
+        const n = vn(wx, wy, 5, seed + 1)
         if (n > 0.66) c = shade(c, 1.05)
         else if (n < 0.33) c = shade(c, 0.95)
         // blades of grass: short darker and lighter strokes

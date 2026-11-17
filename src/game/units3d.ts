@@ -138,7 +138,7 @@ function plate(m: Vox, x: number, y: number, z: number, along = true) {
 
 // ─────────────────────────────────────────────────────────── soldiers
 
-type Kit = 'rifle' | 'at' | 'sniper' | 'engineer'
+type Kit = 'rifle' | 'at' | 'sniper' | 'engineer' | 'mortar' | 'medic'
 type Pose = 'stand' | 'walk1' | 'walk2' | 'aim'
 
 function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
@@ -205,6 +205,42 @@ function soldier(f: Faction, kit: Kit, pose: Pose): Vox {
       m.set(7, wy + 2, armZ - 1, hex('6a4a2a'))
       m.set(7, wy + 3, armZ - 2, hex('6a4a2a'))
       m.set(7, wy - 1, armZ, hex('6a4a2a'))
+    }
+  } else if (kit === 'mortar') {
+    if (aim) {
+      // the mortar set up in front: base plate, bipod, the tube pointing up steeply
+      m.box(4, 8, 0, 7, 10, 0, shade(GUN, 0.85))
+      m.rod(5.5, 8.5, 1, 5.5, 10.5, 8, GUN)
+      m.dot(5.5, 10.5, 8, GUN_HI)
+      m.rod(5.5, 9.8, 5, 4, 10.5, 0, GUN_HI)
+      m.rod(5.5, 9.8, 5, 7, 10.5, 0, GUN_HI)
+      m.box(6, 7, 0, 7, 8, 1, hex('4c5636')) // a crate of rounds
+    } else {
+      // tube and base plate on the back
+      m.rod(5, 2, 6, 5.5, 2.5, 15, GUN)
+      m.box(4, 1, 8, 6, 1, 11, shade(GUN, 0.85))
+      m.box(7, wy, armZ - 1, 7, wy + 3, armZ - 1, GUN)
+    }
+  } else if (kit === 'medic') {
+    const RED = hex('c8322a'), WHITE = COL.white
+    // a big medical pack with a red cross, a bag in the hand, armbands
+    m.box(3, 1, 7, 7, 2, 11, nato ? hex('4e5636') : hex('5c5e3e'))
+    m.box(4, 1, 8, 6, 1, 10, WHITE)
+    m.box(5, 1, 8, 5, 1, 10, RED)
+    m.box(4, 1, 9, 6, 1, 9, RED)
+    m.set(2, 5, 9, WHITE)
+    m.set(8, 5, 9, WHITE)
+    m.dot(2, 5, 9, RED)
+    m.dot(8, 5, 9, RED)
+    m.box(4, 7, 13, 6, 7, 13, WHITE) // a white patch on the helmet
+    m.dot(5, 7.25, 13, RED)
+    if (aim) {
+      // kneeling over the open bag
+      m.box(5, 8, 0, 7, 9, 1, WHITE)
+      m.dot(6, 9.25, 1, RED)
+    } else {
+      m.box(7, wy, armZ - 2, 8, wy + 1, armZ - 1, WHITE)
+      m.dot(7.5, wy + 1.25, armZ - 1.5, RED)
     }
   } else if (kit === 'engineer') {
     // a toolbox in the hand, a spade and a coil of cable on the pack
@@ -1286,6 +1322,8 @@ export function unitModel(key: string, f: Faction): UnitModel {
     case 'at':
     case 'sniper':
     case 'engineer':
+    case 'mortar':
+    case 'medic':
       return infantry(f, key as Kit)
     case 'harv':
       return { hull: oreTruck(f, false), alt: oreTruck(f, true) }

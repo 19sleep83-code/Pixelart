@@ -7,7 +7,14 @@
 import { buildAssets, mountOffset, type Assets } from './game/assets'
 import type { Rot, Sprite } from './core/voxel'
 import { SCALE, TW, TH, KZ, VOX_PER_TILE } from './core/iso'
-import { UNIT_ORDER, BUILD_ORDER, unitDefs, buildingDefs } from './game/defs'
+import { UNIT_ORDER, BUILD_ORDER, PLANNED_ORDER, RULES, VS, ARMOR_NAME, unitDefs, plannedUnitDefs, buildingDefs, type UnitDef } from './game/defs'
+import { GSPEC, COVER } from './game/game'
+import REGELWERK from '../docs/REGELWERK.md?raw'
+import { buildTiles } from './tiles'
+import { DECO } from './game/deco'
+import { fallen, lifted, muzzleFlash } from './anim'
+import { ICONS, CURSORS, icon, cursor, button, panel, flag, rank, scaled } from './uiart'
+import { Rot as RotSet, renderSprite, renderShadow } from './core/voxel'
 import type { Faction } from './game/colors'
 
 interface Sheet {
@@ -141,14 +148,16 @@ async function exportAll(A: Assets, log: (s: string) => void) {
       turret: 'Turm-Sprite nach Turmrichtung, gezeichnet an Rumpf-Pivot + mountOffsets[Rumpfrichtung]',
       shadow: 'Schatten unter dem Rumpf am Boden (z = 0); Luft: um z * 0.85 (Jets * 0.7) nach (0.035, 0.016) Feldern versetzt, Deckkraft 0.7',
       explosion: '14 Bilder über die Lebensdauer des Effekts verteilt',
+      death: 'Infanterie: death_0…3 nacheinander (je etwa 0,12 s), dann death_3 liegen lassen oder ausblenden; Richtung wie hull',
+      turretShadow: 'Turm-Schatten nach Turmrichtung, gezeichnet an Rumpf-Pivot + mountGroundOffsets[Rumpfrichtung], unter allen Rümpfen',
     },
     units: {} as Record<string, Record<string, unknown>>,
     buildings: {} as Record<string, Record<string, unknown>>,
   }
   for (const f of ['nato', 'ru'] as Faction[]) {
-    const defs = unitDefs(f)
+    const defs = { ...unitDefs(f), ...plannedUnitDefs(f) }
     const units: Record<string, unknown> = {}
-    for (const key of UNIT_ORDER) {
+    for (const key of [...UNIT_ORDER, ...PLANNED_ORDER]) {
       const art = A.units[f][key]
       const p = `${R}units/${f}/${key}/`
       const n = dirsOf(art.hull)
@@ -163,6 +172,15 @@ async function exportAll(A: Assets, log: (s: string) => void) {
       if (art.hullAnim) sheets.hullAnim = await Promise.all(art.hullAnim.map((r, i) => rot(`${p}hull_anim_${i}.png`, r)))
       if (art.turret) sheets.turret = await rot(p + 'turret.png', art.turret)
       if (art.turretAnim) sheets.turretAnim = await Promise.all(art.turretAnim.map((r, i) => rot(`${p}turret_anim_${i}.png`, r)))
+      if (inf) {
+        // falling over backwards: four frames, the last one lying flat
+        sheets.death = await Promise.all([0.45, 0.95, 1.35, Math.PI / 2].map((a, i) => rot(`${p}death_${i}.png`, new RotSet(fallen(art.hull.m, a), n, {}, false))))
+      }
+      if (art.turret) {
+        // the turret's shadow, cast from the height it sits at
+        const tm = lifted(art.turret.m, art.mount[2])
+        sheets.turretShadow = await sheet(p + 'turret_shadow.png', Array.from({ length: 32 }, (_, i) => renderShadow(tm, (i / 32) * Math.PI * 2)))
+      }
       if (art.wreck) sheets.wreck = await rot(p + 'wreck.png', art.wreck)
       if (art.wreckTurret) sheets.wreckTurret = await rot(p + 'wreck_turret.png', art.wreckTurret)
       const d = defs[key]
@@ -173,11 +191,13 @@ async function exportAll(A: Assets, log: (s: string) => void) {
         sheets,
         icon: await single(p + 'icon.png', art.icon),
         mount: art.mount,
+        mountGroundOffsets: art.turret ? Array.from({ length: 32 }, (_, i) => mountOffset([art.mount[0], art.mount[1], 0], (i / 32) * Math.PI * 2).map((v) => Math.round(v * 100) / 100)) : undefined,
         mountOffsets: art.turret ? Array.from({ length: 32 }, (_, i) => mountOffset(art.mount, (i / 32) * Math.PI * 2).map((v) => Math.round(v * 100) / 100)) : undefined,
         muzzle: art.muzzle,
         rotor: art.rotor,
         hull: d.hull,
         radius: d.radius,
+        planned: d.planned,
       }
       log(`Einheit ${f}/${key}`)
     }
@@ -225,11 +245,97 @@ async function exportAll(A: Assets, log: (s: string) => void) {
   fx.fire = await sheet(`${R}fx/fire.png`, A.fire, A.fire.length)
   fx.scorch = await sheet(`${R}fx/scorch.png`, A.scorch, A.scorch.length)
   fx.rubble = await sheet(`${R}fx/rubble.png`, A.rubble, A.rubble.length)
+  fx.muzzle = await Promise.all(
+    [0, 1, 2].map((sz) =>
+      sheet(`${R}fx/muzzle_${['rifle', 'cannon', 'howitzer'][sz]}.png`, Array.from({ length: 16 }, (_, i) => muzzleFlash(sz, ((i >> 1) / 8) * Math.PI * 2, i & 1)), 8),
+    ),
+  )
+  fx.muzzleNote = 'Mündungsfeuer 0 Gewehr, 1 Kanone, 2 Haubitze: Bild 2·r + f, r = Richtung 0…7 (wie dir_index mit n = 8), f = Flackerbild 0/1; Mitte = Mündung'
   fx.note = 'smoke/soot/dust: Bild i = Größe i (wächst mit dem Aufsteigen); fire: Flackern im Kreis; scorch/rubble: Größen'
   manifest.fx = fx
+  // life on the map (only for the next version)
+  const deco: Record<string, unknown> = {}
+  for (const d of DECO) {
+    const vars: unknown[] = []
+    for (let v = 0; v < d.variants; v++) {
+      const base = `${R}deco/${d.key}_v${v}`
+      if (d.dirs > 2) {
+        const frames: unknown[] = []
+        for (let f = 0; f < d.frames; f++) {
+          const r = new RotSet(d.make(v, f), d.dirs)
+          const suf = d.frames > 1 ? `_f${f}` : ''
+          frames.push({ sprite: await rot(`${base}${suf}.png`, r), shadow: await sheet(`${base}${suf}_shadow.png`, r.shadows) })
+        }
+        vars.push(frames)
+      } else {
+        // one heading (frames side by side), or two: along x (yaw 0) and along y (yaw 90°)
+        const yaws = d.dirs === 2 ? [0, Math.PI / 2] : [0]
+        const sps = [], shs = []
+        for (const yaw of yaws)
+          for (let f = 0; f < d.frames; f++) {
+            const mdl = d.make(v, f)
+            sps.push(renderSprite(mdl, yaw))
+            shs.push(renderShadow(mdl, yaw, 0.3))
+          }
+        vars.push({ sprite: await sheet(`${base}.png`, sps), shadow: await sheet(`${base}_shadow.png`, shs) })
+      }
+    }
+    deco[d.key] = { name: d.name, dirs: d.dirs, variants: d.variants, frames: d.frames, frameNote: d.frameNote, sheets: vars }
+  }
+  manifest.deco = {
+    note: 'dirs 8: je Variante und Bild ein Sheet mit 8 Richtungen; dirs 2: Bild 0 entlang x, Bild 1 entlang y; dirs 1: Animationsbilder nebeneinander',
+    items: deco,
+  }
+  log('Deko')
+  // the interface: every picture at ×1, ×2 and ×3
+  const ui: Record<string, unknown> = { scales: [1, 2, 3], note: 'Datei <name>@<k>x.png; Hotspot und Nine-Slice-Rand gelten für ×1 und werden mitskaliert' }
+  const three = async (path: string, cv: HTMLCanvasElement) => {
+    for (const k of [1, 2, 3]) await single(`${R}ui/${path}@${k}x.png`, scaled(cv, k))
+    return `ui/${path}`
+  }
+  ui.icons = Object.fromEntries(await Promise.all(Object.entries(ICONS).map(async ([k, v]) => [k, { name: v.name, file: await three(`icons/${k}`, icon(k)) }])))
+  ui.cursors = Object.fromEntries(await Promise.all(Object.entries(CURSORS).map(async ([k, v]) => [k, { name: v.name, hotspot: v.hot, file: await three(`cursors/${k}`, cursor(k)) }])))
+  ui.buttons = { nineSliceMargin: 6, states: Object.fromEntries(await Promise.all((['normal', 'hover', 'pressed', 'disabled'] as const).map(async (st) => [st, await three(`button_${st}`, button(st))]))) }
+  ui.panel = { nineSliceMargin: 8, file: await three('panel', panel()) }
+  ui.flags = { nato: await three('flag_nato', flag('nato')), ru: await three('flag_ru', flag('ru')) }
+  ui.ranks = { note: 'Gefreiter, Feldwebel, Veteran (Rekrut ohne Abzeichen)', files: [await three('rank_1', rank(1)), await three('rank_2', rank(2)), await three('rank_3', rank(3))] }
+  manifest.ui = ui
+  log('Oberfläche')
   if (A.title) manifest.title = await sheet(`${R}ui/title.png`, [A.title])
   log('Effekte')
+  const T = buildTiles()
+  manifest.terrain = {
+    atlas: await single(`${R}terrain/tiles.png`, T.atlas),
+    tileW: TW,
+    tileH: TH,
+    cols: T.cols,
+    note: 'Rauten 64 × 32, Zelle (col, row) im Atlas. Auswahl siehe README, Abschnitt Gelände.',
+    tiles: T.tiles,
+  }
+  log(`Gelände: ${T.tiles.length} Kacheln`)
   files.push({ path: R + 'manifest.json', data: enc.encode(JSON.stringify(manifest, null, 1)) })
+  // the values and rules: the same for both sides, only the names differ
+  const json = (name: string, v: unknown) => files.push({ path: `${R}data/${name}`, data: enc.encode(JSON.stringify(v, null, 1)) })
+  const strip = (d: UnitDef) => {
+    const { name: _n, role: _r, ...rest } = d
+    void _n
+    void _r
+    return rest
+  }
+  const all = (f: Faction) => ({ ...unitDefs(f), ...plannedUnitDefs(f) })
+  const keys = [...UNIT_ORDER, ...PLANNED_ORDER]
+  json('units.json', {
+    note: 'Werte gelten für beide Fraktionen; Namen und Rollenbezeichnung je Fraktion unter names. planned = nur für Godot vorbereitet.',
+    order: UNIT_ORDER,
+    planned: PLANNED_ORDER,
+    units: Object.fromEntries(keys.map((k) => [k, strip(all('nato')[k])])),
+    names: Object.fromEntries((['nato', 'ru'] as Faction[]).map((f) => [f, Object.fromEntries(keys.map((k) => [k, { name: all(f)[k].name, role: all(f)[k].role }]))])),
+    hullPerFaction: Object.fromEntries((['nato', 'ru'] as Faction[]).map((f) => [f, Object.fromEntries(keys.filter((k) => all(f)[k].hull).map((k) => [k, all(f)[k].hull]))])),
+  })
+  json('buildings.json', { order: ['hq', ...BUILD_ORDER], buildings: buildingDefs() })
+  json('damage.json', { note: 'Schaden = Waffe × table[Waffenart][Panzerung]', table: VS, armorNames: ARMOR_NAME })
+  json('rules.json', { ...RULES, garrison: GSPEC, cover: COVER })
+  files.push({ path: R + 'REGELWERK.md', data: enc.encode(REGELWERK) })
   files.push({ path: R + 'README.md', data: enc.encode(README) })
 }
 
@@ -245,11 +351,19 @@ Erzeugt von export.html aus den Voxel-Modellen des Browser-Prototyps. Alles in *
 - \`units/<fraktion>/<einheit>/\` – \`hull.png\` (Rumpf bzw. stehender Soldat), \`shadow.png\`,
   \`turret.png\`, \`hull2.png\` (Ketten), \`hull_anim_N.png\` / \`turret_anim_N.png\` (Radar),
   \`walk1.png\`, \`walk2.png\`, \`aim.png\` (Infanterie), \`alt.png\` (beladener Erzlaster),
-  \`wreck.png\`, \`wreck_turret.png\`, \`icon.png\` (Baumenü).
+  \`wreck.png\`, \`wreck_turret.png\`, \`icon.png\` (Baumenü), \`death_0…3.png\` (Infanterie fällt),
+  \`turret_shadow.png\` (Schatten des Turms). Mörsertrupp und Sanitäter sind als \`planned\` markiert.
 - \`buildings/<fraktion>/<gebäude>/\` – \`body.png\`, \`shadow.png\`, \`turret.png\` (Abwehrstellungen), \`icon.png\`.
 - \`landscape/\` – Bäume, Häuser, Kirche, Scheunen (je mit Schatten), Erz in drei Abbaustufen.
-- \`fx/\` – Explosionen (4 Größen × 14 Bilder), Rauch, Ruß, Staub, Feuer, Brandflecken, Trümmer.
-- \`ui/title.png\` – das Logo.
+- \`fx/\` – Explosionen (4 Größen × 14 Bilder), Rauch, Ruß, Staub, Feuer, Brandflecken, Trümmer,
+  Mündungsfeuer (3 Größen × 8 Richtungen × 2 Bilder).
+- \`terrain/tiles.png\` – das Gelände als Kachelsatz (siehe unten).
+- \`deco/\` – Zäune, Hecken, Autos, Traktor, Strommasten, Windrad (animiert), Heuballen, Kühe, Schafe,
+  Wegkreuz, Sandsack-Stellungen, Panzersperren (je mit Schatten; Aufbau in \`manifest.deco\`).
+- \`ui/\` – Befehls- und Touch-Symbole, Mauszeiger (mit Hotspot), Knöpfe in 4 Zuständen und ein Panel
+  (Nine-Slice), Fahnen, Rangabzeichen; jeweils \`@1x\`, \`@2x\`, \`@3x\`. Dazu \`ui/title.png\` (Logo).
+- \`data/\` – \`units.json\`, \`buildings.json\`, \`damage.json\`, \`rules.json\`: alle Werte und Regeln.
+- \`REGELWERK.md\` – wie das Spiel rechnet, als Grundlage für die Portierung.
 
 ## Sheets
 
@@ -286,6 +400,34 @@ func dir_index(yaw: float, n: int) -> int:
 5. Zeichenreihenfolge: nach \`x + y\` sortieren (y_sort mit der Bildschirm-y des Pivots passt ebenfalls).
 
 Die Animationsregeln (Bilder pro Sekunde usw.) stehen in \`manifest.json\` unter \`animation\`.
+
+## Gelände
+
+\`terrain/tiles.png\` ist ein Atlas aus Rauten (64 × 32, 16 Spalten). \`manifest.terrain.tiles\` nennt zu
+jedem Schlüssel Spalte und Zeile. In Godot: TileSet mit Form *Isometric*, Layout *Diamond Down*,
+Kachelgröße 64 × 32, den Atlas als Quelle mit Regionsgröße 64 × 32. Der Kartengenerator (portiert aus
+\`map.ts\`) wählt je Feld den Schlüssel so:
+
+1. **Ufer:** \`ist_wasser\` = Wasser oder Brücke. Für die 8 Nachbarn in der Reihenfolge
+   +x, −x, +y, −y, (+x+y), (−x+y), (+x−y), (−x−y) wird Bit 0…7 gesetzt, wenn der Nachbar auf der
+   anderen Seite der Uferlinie liegt (Felder außerhalb der Karte zählen nicht). Dann die Ecken
+   bereinigen: Bit 4 löschen, wenn Bit 0 oder 2 gesetzt ist; Bit 5 bei Bit 1 oder 2; Bit 6 bei
+   Bit 0 oder 3; Bit 7 bei Bit 1 oder 3. Ist die Maske nicht 0:
+   - Wasserfeld: \`shore/water-sand/m<maske>\`, wenn ein Nachbar Sand ist, sonst \`shore/water-grass/m<maske>\`
+   - Sandfeld: \`shore/sand/m<maske>\`, jedes andere Landfeld: \`shore/grass/m<maske>\`
+2. **Sonst nach Geländeart** (\`v\` = Variante, z. B. aus einem Hash der Feldkoordinaten):
+   - Wiese: \`grass/s<variant % 3>/h<hecke>/v<0…3>\`
+   - Acker: \`field/c<variant & 7>/d<(variant >> 3) & 1>/h<hecke>/v<0…1>\`
+   - \`forest/v<0…3>\`, \`dirt/v<0…3>\`, \`ore/v<0…3>\` (Erzboden; die Erzbrocken sind Sprites), \`sand/v<0…3>\`
+   - Wasser: \`water/d1\` (Tiefe < 3), \`water/d3\` (< 6), \`water/d6\`, jeweils \`/v<0…3>\`
+   - Straße: am Boden wie eine Wiese (bzw. Ufer, Regel 1), dazu in einer **zweiten TileMap-Ebene** das
+     Overlay \`road/r<verbindungen>/v<0…1>\` (durchsichtig bis auf den Asphalt; Bits wie \`map.road\`:
+     1 = +x, 2 = −x, 4 = +y, 8 = −y)
+   - Brücke: \`bridge/r3\` (entlang x) oder \`bridge/r12\` (entlang y)
+3. **Hecke** (\`h\`): Bit 1, wenn das Feld bei −x zu einer anderen Parzelle gehört, Bit 2 bei −y.
+
+Die Kacheln haben keine großflächigen Farbflecken, damit jede an jede passt. Wer die sanften
+Farbwolken des Prototyps will, legt in Godot eine leichte Rausch-Textur (Modulate oder Shader) darüber.
 `
 
 // ─────────────────────────────────────────────────────────── the page
@@ -298,7 +440,7 @@ const log = (s: string) => {
 }
 ;(async () => {
   log('Erzeuge Grafik aus den Voxel-Modellen …')
-  const A = await buildAssets((t, what) => (document.getElementById('bar')!.style.width = `${Math.round(t * 100)}%`, void what))
+  const A = await buildAssets((t, what) => (document.getElementById('bar')!.style.width = `${Math.round(t * 100)}%`, void what), PLANNED_ORDER)
   log('Packe Sprite-Sheets …')
   await exportAll(A, log)
   const data = zip(files)

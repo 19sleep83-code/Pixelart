@@ -24,12 +24,12 @@ export interface WeaponDef {
 
 /** damage of a weapon class against an armour class */
 export const VS: Record<WClass, Record<Armor, number>> = {
-  mg: { inf: 1, light: 0.3, heavy: 0.08, bld: 0.2, air: 0.25, ship: 0.15 },
-  cannon: { inf: 0.35, light: 1, heavy: 0.9, bld: 0.75, air: 0, ship: 0.8 },
-  auto: { inf: 0.85, light: 0.8, heavy: 0.25, bld: 0.35, air: 0.6, ship: 0.45 },
+  mg: { inf: 1, light: 0.2, heavy: 0.05, bld: 0.2, air: 0.06, ship: 0.15 },
+  cannon: { inf: 0.45, light: 1, heavy: 0.9, bld: 0.75, air: 0, ship: 0.8 },
+  auto: { inf: 0.85, light: 0.8, heavy: 0.25, bld: 0.35, air: 0.25, ship: 0.6 },
   rocket: { inf: 0.3, light: 1, heavy: 1, bld: 0.65, air: 0.9, ship: 0.8 },
   art: { inf: 0.9, light: 0.7, heavy: 0.45, bld: 1, air: 0, ship: 0.7 },
-  flak: { inf: 0.7, light: 0.3, heavy: 0.1, bld: 0.15, air: 1.5, ship: 0.15 },
+  flak: { inf: 0.4, light: 0.3, heavy: 0.1, bld: 0.15, air: 1.5, ship: 0.15 },
   sniper: { inf: 1.6, light: 0.05, heavy: 0.02, bld: 0.02, air: 0, ship: 0.02 },
   missile: { inf: 0.5, light: 1, heavy: 1, bld: 1, air: 0.8, ship: 1.1 },
 }
@@ -77,6 +77,10 @@ export interface UnitDef {
   stealth?: boolean
   /** takes over enemy buildings */
   engineer?: boolean
+  /** heals soldiers nearby: hit points per second, reach in tiles */
+  heal?: { rate: number; range: number }
+  /** prepared for the next version (Godot): art and values exist, not playable here */
+  planned?: boolean
 }
 
 export interface BuildingDef {
@@ -105,7 +109,7 @@ export interface BuildingDef {
 }
 
 const rifle: WeaponDef = { cls: 'mg', proj: 'bullet', dmg: 9, range: 4, reload: 0.9, burst: 3, gap: 0.12, ground: true, air: true }
-const atRocket: WeaponDef = { cls: 'rocket', proj: 'rocket', dmg: 55, range: 5, reload: 2.8, ground: true, air: true }
+const atRocket: WeaponDef = { cls: 'rocket', proj: 'rocket', dmg: 68, range: 5.5, reload: 2.6, ground: true, air: true }
 
 export function unitDefs(f: Faction): Record<string, UnitDef> {
   const nato = f === 'nato'
@@ -117,13 +121,13 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
     },
     at: {
       key: 'at', name: nato ? 'Panzerfaust 3' : 'RPG-7', role: 'Panzerabwehrtrupp', desc: 'Raketen gegen Fahrzeuge, Schiffe und Hubschrauber.',
-      cost: 250, time: 6, hp: 45, armor: 'inf', speed: 0.75, turn: 0, sight: 6, radius: 0.2,
+      cost: 220, time: 6, hp: 60, armor: 'inf', speed: 0.75, turn: 0, sight: 6, radius: 0.2,
       weapon: atRocket, queue: 'inf', producer: 'barracks', req: ['barracks'], infantry: true,
     },
     sniper: {
       key: 'sniper', name: nato ? 'Scharfschütze (G22)' : 'Scharfschütze (SWD)', role: 'Scharfschütze', desc: 'Trifft Infanterie auf große Entfernung. Unsichtbar, solange er stillhält und nicht schießt.',
-      cost: 500, time: 9, hp: 50, armor: 'inf', speed: 0.8, turn: 0, sight: 9, radius: 0.2,
-      weapon: { cls: 'sniper', proj: 'snipe', dmg: 60, range: 8, reload: 3.2, ground: true, air: false, sea: false },
+      cost: 350, time: 9, hp: 50, armor: 'inf', speed: 0.8, turn: 0, sight: 10, radius: 0.2,
+      weapon: { cls: 'sniper', proj: 'snipe', dmg: 60, range: 9, reload: 2.8, ground: true, air: false, sea: false },
       queue: 'inf', producer: 'barracks', req: ['barracks', 'radar'], infantry: true, stealth: true,
     },
     engineer: {
@@ -138,9 +142,9 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
       queue: 'veh', producer: 'factory', req: ['factory', 'ref'], harvester: true,
     },
     scout: {
-      key: 'scout', name: nato ? 'Fennek' : 'BRDM-2', role: 'Spähwagen', desc: 'Sehr schnell und weitsichtig. MG gegen Infanterie und Hubschrauber.',
+      key: 'scout', name: nato ? 'Fennek' : 'BRDM-2', role: 'Spähwagen', desc: 'Sehr schnell und weitsichtig. Leichte Maschinenkanone gegen Infanterie und leichte Fahrzeuge. Zum Aufklären und Jagen von Artillerie.',
       cost: 400, time: 6, hp: 220, armor: 'light', speed: 2.7, turn: 4.2, sight: 10, radius: 0.48,
-      weapon: { cls: 'mg', proj: 'bullet', dmg: 9, range: 5, reload: 0.8, burst: 4, gap: 0.09, ground: true, air: true },
+      weapon: { cls: 'auto', proj: 'bullet', dmg: 5, range: 5, reload: 1.0, burst: 4, gap: 0.09, ground: true, air: false },
       queue: 'veh', producer: 'factory', req: ['factory'],
     },
     ifv: {
@@ -150,53 +154,47 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
       queue: 'veh', producer: 'factory', req: ['factory'],
     },
     mbt: {
-      key: 'mbt', name: nato ? 'Leopard 2A6' : 'T-90A', role: 'Kampfpanzer', desc: nato ? 'Präzise Kanone mit hoher Reichweite.' : 'Schwer gepanzert und günstiger.',
-      cost: nato ? 950 : 850, time: 13, hp: nato ? 620 : 700, armor: 'heavy', speed: nato ? 1.45 : 1.35, turn: 2.2, sight: 7, radius: 0.58,
-      weapon: { cls: 'cannon', proj: 'shell', dmg: nato ? 72 : 78, range: nato ? 6 : 5.5, reload: nato ? 2.6 : 3.0, ground: true, air: false },
+      key: 'mbt', name: nato ? 'Leopard 2A6' : 'T-90A', role: 'Kampfpanzer', desc: 'Schwer gepanzert, starke Kanone. Das Rückgrat jeder Panzertruppe.',
+      cost: 900, time: 13, hp: 660, armor: 'heavy', speed: 1.4, turn: 2.2, sight: 7, radius: 0.58,
+      weapon: { cls: 'cannon', proj: 'shell', dmg: 75, range: 5.75, reload: 2.8, ground: true, air: false },
       queue: 'veh', producer: 'factory', req: ['factory'],
     },
     aa: {
       key: 'aa', name: nato ? 'Gepard 1A2' : '2K22 Tunguska', role: 'Flakpanzer', desc: 'Holt Hubschrauber und Jets vom Himmel. Hilft gegen Infanterie.',
       cost: 700, time: 10, hp: 300, armor: 'light', speed: 1.6, turn: 3, sight: 8, radius: 0.56,
-      weapon: nato
-        ? { cls: 'flak', proj: 'flak', dmg: 15, range: 6.5, reload: 0.7, burst: 4, gap: 0.08, ground: true, air: true }
-        : { cls: 'flak', proj: 'flak', dmg: 17, range: 6, reload: 0.8, burst: 4, gap: 0.09, ground: true, air: true },
+      weapon: { cls: 'flak', proj: 'flak', dmg: 16, range: 6.25, reload: 0.75, burst: 4, gap: 0.085, ground: true, air: true },
       queue: 'veh', producer: 'factory', req: ['factory', 'radar'],
     },
     art: {
       key: 'art', name: nato ? 'Panzerhaubitze 2000' : '2S19 Msta-S', role: 'Rohrartillerie',
-      desc: nato ? 'Schnell feuernde Haubitze mit großer Reichweite und Flächenschaden.' : 'Schwere Haubitze, langsamer, aber mit großen Granaten.',
-      cost: nato ? 1050 : 950, time: 14, hp: nato ? 280 : 300, armor: 'light', speed: nato ? 1.2 : 1.05, turn: 2.2, sight: 6, radius: 0.58,
-      weapon: nato
-        ? { cls: 'art', proj: 'art', dmg: 120, range: 12.5, minRange: 3, reload: 5, burst: 2, gap: 0.5, splash: 1.2, ground: true, air: false }
-        : { cls: 'art', proj: 'art', dmg: 150, range: 11.5, minRange: 3, reload: 6.5, splash: 1.4, ground: true, air: false },
+      desc: 'Panzerhaubitze: große Reichweite und Flächenschaden, schießt Doppelschüsse. Braucht Schutz, nicht zu nah ans Ziel.',
+      cost: 1000, time: 14, hp: 290, armor: 'light', speed: 1.12, turn: 2.2, sight: 6, radius: 0.58,
+      weapon: { cls: 'art', proj: 'art', dmg: 135, range: 12, minRange: 3, reload: 5.75, burst: 2, gap: 0.5, splash: 1.3, ground: true, air: false },
       queue: 'veh', producer: 'factory', req: ['factory', 'radar'],
     },
     mlrs: {
       key: 'mlrs', name: nato ? 'MARS II' : 'BM-21 Grad', role: 'Raketenartillerie',
-      desc: nato ? 'Raketenwerfer auf Kettenfahrgestell: große Reichweite, schwere Salven.' : 'Raketenwerfer auf dem Lastwagen: ganze Flächen unter Feuer, günstig, leicht gepanzert.',
-      cost: nato ? 1300 : 1000, time: 16, hp: nato ? 300 : 220, armor: 'light', speed: nato ? 1.15 : 1.4, turn: 2.2, sight: 6, radius: 0.58,
-      weapon: nato
-        ? { cls: 'art', proj: 'mlrs', dmg: 60, range: 14, minRange: 4, reload: 11, burst: 6, gap: 0.22, splash: 1.1, ground: true, air: false }
-        : { cls: 'art', proj: 'mlrs', dmg: 38, range: 11, minRange: 3, reload: 9, burst: 10, gap: 0.12, splash: 0.95, ground: true, air: false },
+      desc: 'Raketenwerfer: setzt ganze Flächen mit einer Salve unter Feuer, lädt lange nach. Leicht gepanzert.',
+      cost: 1050, time: 16, hp: 260, armor: 'light', speed: 1.27, turn: 2.2, sight: 6, radius: 0.58,
+      weapon: { cls: 'art', proj: 'mlrs', dmg: 49, range: 12.5, minRange: 3.5, reload: 7.5, burst: 8, gap: 0.17, splash: 1.1, ground: true, air: false },
       queue: 'veh', producer: 'factory', req: ['factory', 'radar'],
     },
     heli: {
       key: 'heli', name: nato ? 'AH-64 Apache' : 'Mi-24 Hind', role: 'Kampfhubschrauber', desc: 'Fliegt über alles hinweg. Raketen gegen Fahrzeuge und Schiffe.',
-      cost: 1300, time: 15, hp: nato ? 360 : 420, armor: 'air', speed: 2.6, turn: 2.6, sight: 8, radius: 0.6,
-      weapon: { cls: 'rocket', proj: 'rocket', dmg: nato ? 40 : 34, range: 5, reload: 2.2, burst: 2, gap: 0.2, ground: true, air: false },
+      cost: 1300, time: 15, hp: 390, armor: 'air', speed: 2.6, turn: 2.6, sight: 8, radius: 0.6,
+      weapon: { cls: 'rocket', proj: 'rocket', dmg: 46, range: 5, reload: 2.2, burst: 2, gap: 0.2, ground: true, air: false },
       queue: 'air', producer: 'helipad', req: ['helipad'], air: true,
     },
     jet: {
       key: 'jet', name: nato ? 'Eurofighter' : 'Su-34', role: 'Kampfjet', desc: 'Startet vom Flugfeld zu einem Luftschlag auf ein Ziel und kehrt zum Aufmunitionieren zurück.',
-      cost: 1500, time: 16, hp: nato ? 240 : 280, armor: 'air', speed: 7, turn: 2.6, sight: 7, radius: 0.55,
-      weapon: { cls: 'missile', proj: 'missile', dmg: nato ? 80 : 70, range: 6, reload: 6, burst: nato ? 2 : 3, gap: 0.22, splash: 0.7, ground: true, air: false, sea: true },
+      cost: 1500, time: 16, hp: 260, armor: 'air', speed: 7, turn: 2.6, sight: 7, radius: 0.55,
+      weapon: { cls: 'missile', proj: 'missile', dmg: 92, range: 6, reload: 6, burst: 2, gap: 0.22, splash: 0.7, ground: true, air: false, sea: true },
       queue: 'air', producer: 'airfield', req: ['airfield'], air: true, jet: true,
     },
     boat: {
-      key: 'boat', name: nato ? 'Schnellboot S143' : 'Raptor', role: 'Patrouillenboot', desc: 'Schnelles Boot mit MG. Jagt Infanterie am Ufer und andere Boote.',
-      cost: 500, time: 7, hp: 260, armor: 'ship', speed: 2.9, turn: 3, sight: 8, radius: 0.55,
-      weapon: { cls: 'mg', proj: 'bullet', dmg: 11, range: 5.5, reload: 0.8, burst: 4, gap: 0.08, ground: true, air: true },
+      key: 'boat', name: nato ? 'Schnellboot S143' : 'Raptor', role: 'Patrouillenboot', desc: 'Schnell und wendig, Maschinenkanone. Unterläuft die Raketen großer Schiffe, unterliegt aber Korvetten. Leicht gepanzert.',
+      cost: 500, time: 7, hp: 260, armor: 'light', speed: 2.9, turn: 3, sight: 8, radius: 0.55,
+      weapon: { cls: 'auto', proj: 'shell', dmg: 11, range: 5.5, reload: 0.9, burst: 4, gap: 0.08, ground: true, air: true },
       queue: 'sea', producer: 'shipyard', req: ['shipyard'], naval: true, hull: [nato ? 1.0 : 0.82, 0.31],
     },
     corvette: {
@@ -207,8 +205,8 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
     },
     destroyer: {
       key: 'destroyer', name: nato ? 'Arleigh Burke' : 'Slava-Kreuzer', role: nato ? 'Zerstörer' : 'Raketenkreuzer', desc: 'Marschflugkörper mit großer Reichweite gegen Ziele an Land und auf See.',
-      cost: 1900, time: 18, hp: nato ? 1000 : 1150, armor: 'ship', speed: nato ? 1.6 : 1.4, turn: 1.2, sight: 10, radius: 1.0,
-      weapon: { cls: 'missile', proj: 'missile', dmg: 95, range: nato ? 14 : 13, minRange: 3, reload: nato ? 5 : 6, burst: nato ? 2 : 3, gap: 0.45, splash: 0.9, ground: true, air: false, sea: true },
+      cost: 1900, time: 18, hp: 1075, armor: 'ship', speed: 1.5, turn: 1.2, sight: 10, radius: 1.0,
+      weapon: { cls: 'missile', proj: 'missile', dmg: 117, range: 13.5, minRange: 6, reload: 5.5, burst: 2, gap: 0.45, splash: 0.9, ground: true, air: false, sea: true },
       queue: 'sea', producer: 'shipyard', req: ['shipyard', 'radar'], naval: true, hull: [nato ? 1.88 : 1.94, 0.52],
     },
     lander: {
@@ -224,6 +222,27 @@ export function unitDefs(f: Faction): Record<string, UnitDef> {
     },
   }
 }
+
+/** units prepared for the Godot version: models and values are exported, the browser game does not build them */
+export function plannedUnitDefs(f: Faction): Record<string, UnitDef> {
+  const nato = f === 'nato'
+  return {
+    mortar: {
+      key: 'mortar', name: nato ? 'Mörsertrupp (120 mm)' : 'Mörsertrupp (2B11)', role: 'Mörsertrupp',
+      desc: 'Leichte Artillerie der Infanterie: Steilfeuer über Häuser und Wälder, Flächenschaden gegen Infanterie und leichte Fahrzeuge. Nicht zu nah ans Ziel.',
+      cost: 450, time: 9, hp: 60, armor: 'inf', speed: 0.65, turn: 0, sight: 6, radius: 0.22,
+      weapon: { cls: 'art', proj: 'art', dmg: 75, range: 9, minRange: 2.5, reload: 3.6, splash: 1.2, ground: true, air: false },
+      queue: 'inf', producer: 'barracks', req: ['barracks', 'radar'], infantry: true, planned: true,
+    },
+    medic: {
+      key: 'medic', name: nato ? 'Sanitäter' : 'Sanitäter (Sanitar)', role: 'Sanitäter',
+      desc: 'Heilt verwundete Soldaten in der Nähe. Ohne Waffe.',
+      cost: 250, time: 6, hp: 60, armor: 'inf', speed: 0.9, turn: 0, sight: 6, radius: 0.2,
+      queue: 'inf', producer: 'barracks', req: ['barracks'], infantry: true, heal: { rate: 6, range: 2.5 }, planned: true,
+    },
+  }
+}
+export const PLANNED_ORDER = ['mortar', 'medic']
 
 export function buildingDefs(): Record<string, BuildingDef> {
   return {
@@ -241,7 +260,7 @@ export function buildingDefs(): Record<string, BuildingDef> {
     airfield: { key: 'airfield', name: 'Flugfeld', desc: 'Baut Kampfjets und bietet drei Stellplätze zum Aufmunitionieren.', cost: 1800, time: 15, hp: 1300, w: 4, h: 3, power: -40, sight: 6, req: ['radar'], produces: 'air', slots: 3 },
     bunker: {
       key: 'bunker', name: 'MG-Bunker', desc: 'Verteidigung gegen Infanterie und leichte Fahrzeuge. Bis zu 3 Soldaten können einsteigen und mitschießen.', cost: 500, time: 7, hp: 800, w: 1, h: 1, power: -10, sight: 6,
-      weapon: { cls: 'auto', proj: 'bullet', dmg: 12, range: 5.5, reload: 0.9, burst: 4, gap: 0.1, ground: true, air: false },
+      weapon: { cls: 'auto', proj: 'bullet', dmg: 15, range: 5.5, reload: 0.9, burst: 4, gap: 0.1, ground: true, air: false },
       req: ['barracks'], defense: true, garrison: 3,
     },
     rocket: {
@@ -267,3 +286,31 @@ export const BUILD_RADIUS = 5
 /** kills needed for each rank */
 export const RANKS = [3, 7, 12]
 export const RANK_NAME = ['Rekrut', 'Gefreiter', 'Feldwebel', 'Veteran']
+
+/** the rules in numbers, as the game uses them (also written into the export for Godot) */
+export const RULES = {
+  startCredits: START_CREDITS,
+  harvestLoad: HARVEST_LOAD,
+  orePerTile: ORE_PER_TILE,
+  mineAmount: 50,
+  mineInterval: 0.5,
+  unloadSeconds: 2.2,
+  buildRadius: BUILD_RADIUS,
+  sellRefund: 0.5,
+  repairSeconds: 25,
+  repairCostShare: 0.3,
+  lowPowerProduction: 0.45,
+  lowPowerDefenseRate: 0.5,
+  extraProducerSpeed: 0.5,
+  buildingRiseSeconds: 1.6,
+  brokeTrickle: { perSecond: 8, below: 1000 },
+  ranks: { kills: RANKS, names: RANK_NAME, damageBonus: 0.12, armorBonus: 0.07, promoteHeal: 0.25, veteranRegen: 0.01 },
+  damageRandom: [0.9, 1.1],
+  splashFalloff: 0.6,
+  jetRearmSeconds: 6,
+  carrierRebuildSeconds: 22,
+  carrierStrikeRange: 17,
+  sniperHideAfter: 2.5,
+  sniperSpottedWithin: 2.2,
+  aiDifficulty: { production: [0.8, 1, 1.25], income: [0.75, 1, 1.3] },
+}

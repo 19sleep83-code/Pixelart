@@ -237,17 +237,17 @@ function fx(): Pick<Assets, 'explosions' | 'smoke' | 'dust' | 'soot' | 'fire' | 
   return { explosions, smoke, dust, soot, fire, scorch, rubble }
 }
 
-export async function buildAssets(onProgress: (t: number, what: string) => void): Promise<Assets> {
+export async function buildAssets(onProgress: (t: number, what: string) => void, extraUnits: string[] = []): Promise<Assets> {
   const A = new Assets()
   Object.assign(A, fx())
   const jobs: [string, () => void][] = []
   for (const f of ['nato', 'ru'] as Faction[]) {
     A.units[f] = {}
     A.buildings[f] = {}
-    for (const key of UNIT_ORDER) {
+    for (const key of [...UNIT_ORDER, ...extraUnits]) {
       jobs.push([`Einheiten: ${key}`, () => {
         const um = unitModel(key, f)
-        const inf = key === 'rifle' || key === 'at' || key === 'sniper' || key === 'engineer'
+        const inf = key === 'rifle' || key === 'at' || key === 'sniper' || key === 'engineer' || key === 'mortar' || key === 'medic'
         const dirs = inf ? 16 : 32
         const hull = new Rot(um.hull, dirs)
         const art: UnitArt = {

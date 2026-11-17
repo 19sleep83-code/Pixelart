@@ -35,7 +35,7 @@ export interface Garrison {
   /** the bunker it belongs to */
   b: Ent | null
 }
-const GSPEC: Record<GKind, { cap: number; range: number; sight: number; name: string }> = {
+export const GSPEC: Record<GKind, { cap: number; range: number; sight: number; name: string }> = {
   house: { cap: 4, range: 1.5, sight: 2, name: 'Wohnhaus' },
   barn: { cap: 3, range: 1, sight: 1.5, name: 'Scheune' },
   church: { cap: 6, range: 2.5, sight: 4, name: 'Kirche' },
